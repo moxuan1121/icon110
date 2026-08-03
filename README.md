@@ -7,6 +7,7 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - No settings bundle
 - No PreferenceLoader, Alderis, or other third-party tweak libraries
 - Injects only into `com.apple.springboard`
+- Avoids competing with SpringBoard's folder open/close scale animation
 
 Build with Theos:
 

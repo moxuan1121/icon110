@@ -16,17 +16,7 @@ static const CGFloat kIconScale = 1.10;
     [self _icon110ApplyScale];
 }
 
-- (void)setIconContentScale:(CGFloat)scale {
-    %orig(scale);
-    [self _icon110ApplyScale];
-}
-
 - (void)didMoveToSuperview {
-    %orig;
-    [self _icon110ApplyScale];
-}
-
-- (void)layoutSubviews {
     %orig;
     [self _icon110ApplyScale];
 }
@@ -35,7 +25,10 @@ static const CGFloat kIconScale = 1.10;
 - (void)_icon110ApplyScale {
     // Keep widgets at their system size; only enlarge normal app/folder icons.
     if ([self.icon isKindOfClass:objc_getClass("SBWidgetIcon")]) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
         self.layer.sublayerTransform = CATransform3DIdentity;
+        [CATransaction commit];
         return;
     }
 
@@ -45,7 +38,12 @@ static const CGFloat kIconScale = 1.10;
         return;
     }
 
+    // Do not create a second implicit Core Animation transition. SpringBoard's
+    // folder controller animates the surrounding icon views itself.
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
     self.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+    [CATransaction commit];
 }
 
 %end
