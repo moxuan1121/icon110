@@ -4,11 +4,12 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 
 - Fixed app/folder icon scale: 110%
 - Widgets remain at the system scale
+- Application and folder labels are hidden
 - No settings bundle
 - No PreferenceLoader, Alderis, or other third-party tweak libraries
 - Injects only into `com.apple.springboard`
-- Reports the visible 110% content scale for folder transition calculations,
-  preventing SpringBoard from applying a final container scale correction
+- Reports 110% for every non-widget icon at both ends of folder transitions,
+  preventing folder contents from returning through a temporary 100% endpoint
 
 Build with Theos:
 

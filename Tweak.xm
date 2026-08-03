@@ -5,7 +5,6 @@ static const CGFloat kIconScale = 1.10;
 
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
-- (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
@@ -13,14 +12,19 @@ static const CGFloat kIconScale = 1.10;
 
 %hook SBIconView
 
-// SpringBoard reads this value when it creates the folder transition. Report
-// the same scale that is actually visible so the transition has no correction
-// step at the end.
+// SpringBoard reads this value at both ends of a folder transition. Every
+// non-widget icon must report the same visible scale; otherwise icons inside
+// the folder are handed back to the desktop with a temporary 100% endpoint.
 - (CGFloat)iconContentScale {
-    if ([self isFolderIcon]) {
-        return kIconScale;
+    if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+        return %orig;
     }
-    return %orig;
+    return kIconScale;
+}
+
+// Remove application/folder labels without loading a preferences bundle.
+- (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
+    %orig(NO);
 }
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
@@ -57,4 +61,3 @@ static const CGFloat kIconScale = 1.10;
 }
 
 %end
-
