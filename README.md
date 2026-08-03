@@ -14,3 +14,6 @@ Build with Theos:
 make package FINALPACKAGE=1
 ```
 
+The included `build-roothide.yml` workflow uses the official RootHide Theos
+fork and builds with `THEOS_PACKAGE_SCHEME=roothide`. Its package is uploaded
+as the `Icon110-RootHide` artifact.
