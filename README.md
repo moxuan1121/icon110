@@ -7,8 +7,8 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - No settings bundle
 - No PreferenceLoader, Alderis, or other third-party tweak libraries
 - Injects only into `com.apple.springboard`
-- Scales only `SBIconImageView` contents, leaving folder containers, labels and
-  badges untouched so SpringBoard's folder transitions remain independent
+- Reports the visible 110% content scale for folder transition calculations,
+  preventing SpringBoard from applying a final container scale correction
 
 Build with Theos:
 
