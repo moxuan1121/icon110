@@ -6,11 +6,30 @@ static const CGFloat kIconScale = 1.10;
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
+@property (nonatomic, strong) NSString *location;
+- (BOOL)isFolderIcon;
+- (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
 @end
 
 %hook SBIconView
+
+// Folder transitions consult iconContentScale when handing views between the
+// collapsed folder icon and the expanded folder list. Keep both endpoints at
+// 110%, while leaving ordinary Home Screen app transitions completely stock.
+- (CGFloat)iconContentScale {
+    if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+        return %orig;
+    }
+
+    BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
+    if ([self isFolderIcon] || isInsideFolder) {
+        return kIconScale;
+    }
+
+    return %orig;
+}
 
 // Remove application and folder labels without a settings dependency.
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
@@ -54,4 +73,3 @@ static const CGFloat kIconScale = 1.10;
 }
 
 %end
-
