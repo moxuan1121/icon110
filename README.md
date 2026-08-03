@@ -10,6 +10,8 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - Injects only into `com.apple.springboard`
 - Reports 110% for every non-widget icon at both ends of folder transitions,
   preventing folder contents from returning through a temporary 100% endpoint
+- Composes 110% with SpringBoard's live app transition scale so returning from
+  an application to the Home Screen does not flatten or hitch at the endpoint
 
 Build with Theos:
 

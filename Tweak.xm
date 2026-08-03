@@ -16,10 +16,15 @@ static const CGFloat kIconScale = 1.10;
 // non-widget icon must report the same visible scale; otherwise icons inside
 // the folder are handed back to the desktop with a temporary 100% endpoint.
 - (CGFloat)iconContentScale {
+    CGFloat systemScale = %orig;
     if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
-        return %orig;
+        return systemScale;
     }
-    return kIconScale;
+
+    // Preserve SpringBoard's live app-launch/app-close interpolation and add
+    // the tweak scale on top. Returning a fixed 1.10 here would flatten the
+    // final part of the return-to-home animation and cause a visible hitch.
+    return systemScale * kIconScale;
 }
 
 // Remove application/folder labels without loading a preferences bundle.
