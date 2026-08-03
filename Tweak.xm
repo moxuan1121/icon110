@@ -5,40 +5,20 @@ static const CGFloat kIconScale = 1.10;
 
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
-- (CGFloat)iconContentScale;
+@property (nonatomic, strong) UIView *contentContainerView;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
 @end
 
 %hook SBIconView
 
-// SpringBoard reads this value at both ends of a folder transition. Every
-// non-widget icon must report the same visible scale; otherwise icons inside
-// the folder are handed back to the desktop with a temporary 100% endpoint.
-- (CGFloat)iconContentScale {
-    CGFloat systemScale = %orig;
-    if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
-        return systemScale;
-    }
-
-    // Preserve SpringBoard's live app-launch/app-close interpolation and add
-    // the tweak scale on top. Returning a fixed 1.10 here would flatten the
-    // final part of the return-to-home animation and cause a visible hitch.
-    return systemScale * kIconScale;
-}
-
-// Remove application/folder labels without loading a preferences bundle.
+// Remove application and folder labels without a settings dependency.
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
 }
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
     %orig(animated);
-    [self _icon110ApplyScale];
-}
-
-- (void)setIconContentScale:(CGFloat)scale {
-    %orig(scale);
     [self _icon110ApplyScale];
 }
 
@@ -53,16 +33,25 @@ static const CGFloat kIconScale = 1.10;
         return;
     }
 
-    CATransform3D transform = self.layer.sublayerTransform;
+    UIView *container = self.contentContainerView;
+    if (!container) {
+        return;
+    }
+
+    CATransform3D transform = container.layer.sublayerTransform;
     if (fabs(transform.m11 - kIconScale) < 0.001 &&
         fabs(transform.m22 - kIconScale) < 0.001) {
         return;
     }
 
+    // SpringBoard animates the outer SBIconView for app and folder
+    // transitions. Scaling only this inner content layer keeps the native
+    // transition model untouched and prevents a 110% -> 100% handoff.
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    self.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+    container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
 }
 
 %end
+
