@@ -4,33 +4,21 @@
 static const CGFloat kIconScale = 1.10;
 static BOOL gIcon110FolderTransitionActive = NO;
 
-static UIImage *Icon110ShadowImage(void) {
-    static UIImage *image;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSString *path = @"/Library/Application Support/Icon110/Icon110Shadow@3x.png";
-        image = [UIImage imageWithContentsOfFile:path];
-    });
-    return image;
-}
-
 typedef void (^Icon110Completion)(void);
 
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
-@property (nonatomic, strong) CALayer *icon110ShadowLayer;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
+- (CGFloat)iconImageCornerRadius;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
 - (void)_icon110ApplyShadow;
 @end
 
 %hook SBIconView
-
-%property (nonatomic, strong) CALayer *icon110ShadowLayer;
 
 // Folder transitions consult iconContentScale for both the collapsed folder
 // icon and its expanded contents. Expanded icons report 110% only while an
@@ -102,7 +90,8 @@ typedef void (^Icon110Completion)(void);
     if (!icon ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
-        self.icon110ShadowLayer.hidden = YES;
+        self.layer.shadowOpacity = 0.0;
+        self.layer.shadowPath = nil;
         return;
     }
 
@@ -111,31 +100,25 @@ typedef void (^Icon110Completion)(void);
         return;
     }
 
-    CALayer *shadowLayer = self.icon110ShadowLayer;
-    if (!shadowLayer) {
-        UIImage *image = Icon110ShadowImage();
-        if (!image) {
-            return;
-        }
-
-        shadowLayer = [CALayer layer];
-        shadowLayer.contents = (__bridge id)image.CGImage;
-        shadowLayer.contentsScale = image.scale;
-        shadowLayer.contentsGravity = kCAGravityResizeAspect;
-        shadowLayer.bounds = (CGRect){CGPointZero, image.size};
-        self.icon110ShadowLayer = shadowLayer;
-        [container.layer insertSublayer:shadowLayer atIndex:0];
-    } else if (shadowLayer.superlayer != container.layer) {
-        [shadowLayer removeFromSuperlayer];
-        [container.layer insertSublayer:shadowLayer atIndex:0];
-    }
-
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    container.layer.masksToBounds = NO;
-    shadowLayer.hidden = NO;
-    shadowLayer.position = CGPointMake(CGRectGetMidX(container.bounds),
-                                       CGRectGetMidY(container.bounds));
+    self.layer.masksToBounds = NO;
+    self.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.layer.shadowOpacity = 0.40;
+    self.layer.shadowRadius = 5.0;
+    self.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+
+    // sublayerTransform enlarges the icon contents but not the outer view's
+    // shadow path, so expand the path by the same fixed 110% here.
+    CGRect iconRect = [container convertRect:container.bounds toView:self];
+    CGFloat dx = CGRectGetWidth(iconRect) * (kIconScale - 1.0) * 0.5;
+    CGFloat dy = CGRectGetHeight(iconRect) * (kIconScale - 1.0) * 0.5;
+    CGRect shadowRect = CGRectInset(iconRect, -dx, -dy);
+    CGFloat cornerRadius = [self respondsToSelector:@selector(iconImageCornerRadius)]
+        ? [self iconImageCornerRadius] * kIconScale
+        : 13.5;
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:shadowRect
+                                                       cornerRadius:cornerRadius].CGPath;
     [CATransaction commit];
 }
 
