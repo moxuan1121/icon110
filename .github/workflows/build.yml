@@ -3,7 +3,7 @@ name: Build Icon110 package
 on:
   workflow_dispatch:
   push:
-    branches: [master, main]
+    branches: [master, main, mox1]
 
 jobs:
   build:
@@ -32,4 +32,3 @@ jobs:
           name: Icon110
           path: packages/*.deb
           if-no-files-found: error
-
