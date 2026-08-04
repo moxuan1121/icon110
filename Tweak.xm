@@ -28,6 +28,10 @@ static UIImage *Icon110ShadowImage(void) {
 
         CGContextSetBlendMode(context, kCGBlendModeClear);
         [path fill];
+        // Keep only the shadow below the icon. The plugin contributes no
+        // pixels over the icon artwork or along its top and upper sides.
+        CGContextClearRect(context, CGRectMake(0.0, 0.0, size.width,
+                                               CGRectGetMaxY(iconRect)));
         image = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
     });
@@ -41,17 +45,22 @@ typedef void (^Icon110Completion)(void);
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
 @property (nonatomic, strong) CALayer *icon110ShadowLayer;
+@property (nonatomic, assign) BOOL icon110ShadowSuppressed;
+@property (nonatomic, assign) NSInteger icon110ShadowGeneration;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (CGFloat)iconImageCornerRadius;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
 - (void)_icon110ApplyShadow;
+- (void)_icon110SuppressShadowForDuration:(NSTimeInterval)duration;
 @end
 
 %hook SBIconView
 
 %property (nonatomic, strong) CALayer *icon110ShadowLayer;
+%property (nonatomic, assign) BOOL icon110ShadowSuppressed;
+%property (nonatomic, assign) NSInteger icon110ShadowGeneration;
 
 // Folder transitions consult iconContentScale for both the collapsed folder
 // icon and its expanded contents. Expanded icons report 110% only while an
@@ -91,6 +100,22 @@ typedef void (^Icon110Completion)(void);
     [self _icon110ApplyShadow];
 }
 
+- (void)setTransform:(CGAffineTransform)transform {
+    NSTimeInterval duration = [UIView inheritedAnimationDuration];
+    if (duration > 0.0) {
+        [self _icon110SuppressShadowForDuration:duration];
+    }
+    %orig(transform);
+}
+
+- (void)setBounds:(CGRect)bounds {
+    NSTimeInterval duration = [UIView inheritedAnimationDuration];
+    if (duration > 0.0) {
+        [self _icon110SuppressShadowForDuration:duration];
+    }
+    %orig(bounds);
+}
+
 %new
 - (void)_icon110ApplyScale {
     if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
@@ -123,6 +148,11 @@ typedef void (^Icon110Completion)(void);
     if (!icon || [self isFolderIcon] ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
+        self.icon110ShadowLayer.hidden = YES;
+        return;
+    }
+
+    if (self.icon110ShadowSuppressed) {
         self.icon110ShadowLayer.hidden = YES;
         return;
     }
@@ -161,6 +191,24 @@ typedef void (^Icon110Completion)(void);
     shadowLayer.position = CGPointMake(CGRectGetMidX(container.bounds),
                                        CGRectGetMidY(container.bounds));
     [CATransaction commit];
+}
+
+%new
+- (void)_icon110SuppressShadowForDuration:(NSTimeInterval)duration {
+    self.icon110ShadowSuppressed = YES;
+    self.icon110ShadowLayer.hidden = YES;
+    NSInteger generation = self.icon110ShadowGeneration + 1;
+    self.icon110ShadowGeneration = generation;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)((duration + 0.03) * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (self.icon110ShadowGeneration != generation) {
+            return;
+        }
+        self.icon110ShadowSuppressed = NO;
+        [self _icon110ApplyShadow];
+    });
 }
 
 %end
