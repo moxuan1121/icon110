@@ -8,15 +8,17 @@ static UIImage *Icon110ShadowImage(void) {
     static UIImage *image;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        CGSize size = CGSizeMake(120.0, 120.0);
-        CGRect iconRect = CGRectMake(30.0, 28.0, 60.0, 60.0);
+        CGSize size = CGSizeMake(128.0, 128.0);
+        // The transparent centre is slightly larger than the unscaled icon.
+        // This prevents any dark pixels touching the icon during snapshots.
+        CGRect iconRect = CGRectMake(32.0, 30.0, 64.0, 64.0);
         UIGraphicsBeginImageContextWithOptions(size, NO, 3.0);
         CGContextRef context = UIGraphicsGetCurrentContext();
         UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:iconRect
-                                                        cornerRadius:13.5];
+                                                        cornerRadius:15.0];
 
         CGContextSaveGState(context);
-        CGContextSetShadowWithColor(context, CGSizeMake(0.0, 3.0), 6.0,
+        CGContextSetShadowWithColor(context, CGSizeMake(0.0, 4.0), 8.0,
                                     [UIColor colorWithWhite:0.0 alpha:0.45].CGColor);
         [UIColor.blackColor setFill];
         [path fill];
@@ -144,6 +146,7 @@ typedef void (^Icon110Completion)(void);
         shadowLayer.contentsScale = shadowImage.scale;
         shadowLayer.contentsGravity = kCAGravityResizeAspect;
         shadowLayer.bounds = (CGRect){CGPointZero, shadowImage.size};
+        shadowLayer.zPosition = -1000.0;
         self.icon110ShadowLayer = shadowLayer;
         [container.layer insertSublayer:shadowLayer atIndex:0];
     } else if (shadowLayer.superlayer != container.layer) {
@@ -151,6 +154,7 @@ typedef void (^Icon110Completion)(void);
         [container.layer insertSublayer:shadowLayer atIndex:0];
     }
 
+    shadowLayer.zPosition = -1000.0;
     shadowLayer.hidden = NO;
     shadowLayer.position = CGPointMake(CGRectGetMidX(container.bounds),
                                        CGRectGetMidY(container.bounds));
