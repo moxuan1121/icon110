@@ -7,10 +7,9 @@
 #define ICONSHADOW_JBROOT(path) (path)
 #endif
 
-static const CGFloat kIconShadowScale = 1.10;
-
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
+@property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) CALayer *iconShadowLayer;
 - (BOOL)isFolderIcon;
 - (void)_iconShadowSetup;
@@ -41,19 +40,25 @@ static const CGFloat kIconShadowScale = 1.10;
     %orig;
     [self _iconShadowSetup];
     CALayer *shadow = self.iconShadowLayer;
-    if (!shadow) return;
+    UIView *container = self.contentContainerView;
+    if (!shadow || !container || shadow.superlayer != container.layer) return;
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    shadow.position = CGPointMake(CGRectGetMidX(self.bounds), CGRectGetMidY(self.bounds));
-    shadow.transform = CATransform3DMakeScale(kIconShadowScale, kIconShadowScale, 1.0);
+    shadow.position = CGPointMake(CGRectGetMidX(container.bounds), CGRectGetMidY(container.bounds));
+    // The content container already receives Icon110's 1.10 sublayer scale.
+    // Keeping this layer at identity makes the icon and shadow share one
+    // transform during app and folder transitions instead of handing off
+    // between two independently animated layer trees.
+    shadow.transform = CATransform3DIdentity;
     [CATransaction commit];
 }
 
 %new
 - (void)_iconShadowSetup {
     id icon = self.icon;
-    if (!icon || [self isFolderIcon] ||
+    UIView *container = self.contentContainerView;
+    if (!icon || !container || [self isFolderIcon] ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
         [self _iconShadowDetach];
@@ -75,8 +80,10 @@ static const CGFloat kIconShadowScale = 1.10;
     }
 
     self.layer.masksToBounds = NO;
-    if (shadow.superlayer != self.layer) {
-        [self.layer insertSublayer:shadow atIndex:0];
+    container.layer.masksToBounds = NO;
+    if (shadow.superlayer != container.layer) {
+        [shadow removeFromSuperlayer];
+        [container.layer insertSublayer:shadow atIndex:0];
     }
     shadow.hidden = NO;
 }
