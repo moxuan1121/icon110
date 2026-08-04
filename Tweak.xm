@@ -1,13 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <math.h>
 
-#if __has_include(<roothide.h>)
-#include <roothide.h>
-#define ICON110_JBROOT(path) jbroot(path)
-#else
-#define ICON110_JBROOT(path) (path)
-#endif
-
 static const CGFloat kIconScale = 1.10;
 static BOOL gIcon110FolderTransitionActive = NO;
 
@@ -22,19 +15,9 @@ typedef void (^Icon110Completion)(void);
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
-- (void)_icon110SetupShadow;
 @end
 
 %hook SBIconView
-
-%property (nonatomic, strong) CALayer *shadowLayer;
-
-- (instancetype)initWithConfigurationOptions:(NSUInteger)options
-                           listLayoutProvider:(id)layoutProvider {
-    SBIconView *view = %orig(options, layoutProvider);
-    [view _icon110SetupShadow];
-    return view;
-}
 
 // Folder transitions consult iconContentScale for both the collapsed folder
 // icon and its expanded contents. Expanded icons report 110% only while an
@@ -70,59 +53,18 @@ typedef void (^Icon110Completion)(void);
 
 - (void)layoutSubviews {
     %orig;
-    [self _icon110SetupShadow];
 
-    CALayer *shadow = self.shadowLayer;
-    if (!shadow) return;
-
-    UIView *container = self.contentContainerView;
-    if (!container) return;
-
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    if (shadow.superlayer != container.layer) {
-        [shadow removeFromSuperlayer];
-        [container.layer insertSublayer:shadow atIndex:0];
+    // Hello Shadow ships a bitmap sized for the stock 100% icon. Match that
+    // existing layer to Icon110 so the enlarged icon does not cover it.
+    if ([self respondsToSelector:@selector(shadowLayer)]) {
+        CALayer *shadow = self.shadowLayer;
+        if (shadow) {
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES];
+            shadow.transform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+            [CATransaction commit];
+        }
     }
-    shadow.position = CGPointMake(CGRectGetMidX(container.bounds),
-                                  CGRectGetMidY(container.bounds));
-    shadow.transform = CATransform3DIdentity;
-    [CATransaction commit];
-}
-
-%new
-- (void)_icon110SetupShadow {
-    id icon = self.icon;
-    BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
-    if (!icon || [self isFolderIcon] || isInsideFolder ||
-        [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
-        [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
-        self.shadowLayer.hidden = YES;
-        return;
-    }
-
-    CALayer *shadow = self.shadowLayer;
-    if (!shadow) {
-        NSString *path = ICON110_JBROOT(@"/Library/Themes/iconShadow@3x.png");
-        UIImage *image = [UIImage imageWithContentsOfFile:path];
-        if (!image) return;
-
-        shadow = [CALayer layer];
-        shadow.contents = (__bridge id)image.CGImage;
-        shadow.contentsScale = image.scale;
-        shadow.contentsGravity = kCAGravityResizeAspect;
-        shadow.bounds = (CGRect){CGPointZero, image.size};
-        self.shadowLayer = shadow;
-    }
-
-    UIView *container = self.contentContainerView;
-    if (!container) return;
-    container.layer.masksToBounds = NO;
-    if (shadow.superlayer != container.layer) {
-        [shadow removeFromSuperlayer];
-        [container.layer insertSublayer:shadow atIndex:0];
-    }
-    shadow.hidden = NO;
 }
 
 %new
