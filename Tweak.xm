@@ -75,17 +75,25 @@ typedef void (^Icon110Completion)(void);
     CALayer *shadow = self.shadowLayer;
     if (!shadow) return;
 
+    UIView *container = self.contentContainerView;
+    if (!container) return;
+
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    shadow.position = CGPointMake(CGRectGetMidX(self.bounds), CGRectGetMidY(self.bounds));
-    shadow.transform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+    if (shadow.superlayer != container.layer) {
+        [shadow removeFromSuperlayer];
+        [container.layer insertSublayer:shadow atIndex:0];
+    }
+    shadow.position = CGPointMake(CGRectGetMidX(container.bounds),
+                                  CGRectGetMidY(container.bounds));
+    shadow.transform = CATransform3DIdentity;
     [CATransaction commit];
 }
 
 %new
 - (void)_icon110SetupShadow {
     id icon = self.icon;
-    if (!icon ||
+    if (!icon || [self isFolderIcon] ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
         self.shadowLayer.hidden = YES;
@@ -104,10 +112,15 @@ typedef void (^Icon110Completion)(void);
         shadow.contentsGravity = kCAGravityResizeAspect;
         shadow.bounds = (CGRect){CGPointZero, image.size};
         self.shadowLayer = shadow;
-        [self.layer insertSublayer:shadow atIndex:0];
     }
 
-    self.layer.masksToBounds = NO;
+    UIView *container = self.contentContainerView;
+    if (!container) return;
+    container.layer.masksToBounds = NO;
+    if (shadow.superlayer != container.layer) {
+        [shadow removeFromSuperlayer];
+        [container.layer insertSublayer:shadow atIndex:0];
+    }
     shadow.hidden = NO;
 }
 
