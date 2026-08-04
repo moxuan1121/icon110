@@ -93,7 +93,8 @@ typedef void (^Icon110Completion)(void);
 %new
 - (void)_icon110SetupShadow {
     id icon = self.icon;
-    if (!icon || [self isFolderIcon] ||
+    BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
+    if (!icon || [self isFolderIcon] || isInsideFolder ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
         self.shadowLayer.hidden = YES;
