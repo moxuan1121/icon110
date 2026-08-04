@@ -1,6 +1,6 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.10-7
+Version: 1.0.10-8
 Architecture: iphoneos-arm
 Conflicts: com.wkk.iconshadow
 Replaces: com.wkk.iconshadow

@@ -36,6 +36,10 @@ typedef void (^Icon110Completion)(void);
 }
 
 // Remove application and folder labels without a settings dependency.
+- (BOOL)allowsLabelArea {
+    return NO;
+}
+
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
 }
