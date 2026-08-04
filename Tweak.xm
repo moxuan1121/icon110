@@ -18,8 +18,10 @@ static UIImage *Icon110ShadowImage(void) {
                                                         cornerRadius:15.0];
 
         CGContextSaveGState(context);
-        CGContextSetShadowWithColor(context, CGSizeMake(0.0, 4.0), 8.0,
-                                    [UIColor colorWithWhite:0.0 alpha:0.45].CGColor);
+        // A mostly downward shadow like the reference package. Keeping the
+        // blur smaller than the vertical offset avoids a dark top outline.
+        CGContextSetShadowWithColor(context, CGSizeMake(0.0, 7.0), 5.0,
+                                    [UIColor colorWithWhite:0.0 alpha:0.36].CGColor);
         [UIColor.blackColor setFill];
         [path fill];
         CGContextRestoreGState(context);
@@ -118,7 +120,7 @@ typedef void (^Icon110Completion)(void);
 %new
 - (void)_icon110ApplyShadow {
     id icon = self.icon;
-    if (!icon ||
+    if (!icon || [self isFolderIcon] ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
         self.icon110ShadowLayer.hidden = YES;
