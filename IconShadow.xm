@@ -14,6 +14,7 @@ static const CGFloat kIconShadowScale = 1.10;
 @property (nonatomic, strong) CALayer *iconShadowLayer;
 - (BOOL)isFolderIcon;
 - (void)_iconShadowSetup;
+- (void)_iconShadowDetach;
 @end
 
 %hook SBIconView
@@ -25,6 +26,15 @@ static const CGFloat kIconShadowScale = 1.10;
     SBIconView *view = %orig(options, layoutProvider);
     [view _iconShadowSetup];
     return view;
+}
+
+- (void)setIcon:(id)icon {
+    // SBIconView instances are reused by SpringBoard.  Detach the old layer
+    // before the icon changes so a normal icon shadow can never survive for
+    // one frame in a folder thumbnail or transition view.
+    [self _iconShadowDetach];
+    %orig(icon);
+    [self _iconShadowSetup];
 }
 
 - (void)layoutSubviews {
@@ -46,7 +56,7 @@ static const CGFloat kIconShadowScale = 1.10;
     if (!icon || [self isFolderIcon] ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
-        self.iconShadowLayer.hidden = YES;
+        [self _iconShadowDetach];
         return;
     }
 
@@ -62,11 +72,25 @@ static const CGFloat kIconShadowScale = 1.10;
         shadow.contentsGravity = kCAGravityResizeAspect;
         shadow.bounds = (CGRect){CGPointZero, image.size};
         self.iconShadowLayer = shadow;
-        [self.layer insertSublayer:shadow atIndex:0];
     }
 
     self.layer.masksToBounds = NO;
+    if (shadow.superlayer != self.layer) {
+        [self.layer insertSublayer:shadow atIndex:0];
+    }
     shadow.hidden = NO;
+}
+
+%new
+- (void)_iconShadowDetach {
+    CALayer *shadow = self.iconShadowLayer;
+    if (!shadow) return;
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    shadow.hidden = YES;
+    [shadow removeFromSuperlayer];
+    [CATransaction commit];
 }
 
 %end
