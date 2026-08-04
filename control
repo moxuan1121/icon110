@@ -1,10 +1,8 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.10-8
+Version: 1.0.10-9
 Architecture: iphoneos-arm
-Conflicts: com.wkk.iconshadow
-Replaces: com.wkk.iconshadow
-Description: Icon110 1.0.10 and native shadow behavior compiled into one RootHide dylib, without DynamicPatches.
+Description: Fixed 110% icon scaling with labels and page dots removed. No settings or tweak dependencies.
 Maintainer: moxuan1121
 Author: moxuan1121
 Section: Tweaks
