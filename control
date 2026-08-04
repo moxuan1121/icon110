@@ -1,10 +1,10 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.10-4
+Version: 1.0.10-5
 Architecture: iphoneos-arm
 Conflicts: com.wkk.iconshadow
 Replaces: com.wkk.iconshadow
-Description: Icon110 1.0.10 plus a separate native RootHide IconShadow dylib, without DynamicPatches.
+Description: Icon110 1.0.10 and native shadow behavior compiled into one RootHide dylib, without DynamicPatches.
 Maintainer: moxuan1121
 Author: moxuan1121
 Section: Tweaks
