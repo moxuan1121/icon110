@@ -1,8 +1,8 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.10
+Version: 1.1.0
 Architecture: iphoneos-arm
-Description: Enlarges SpringBoard app icons to a fixed 110 percent without preferences or third-party tweak dependencies.
+Description: Enlarges SpringBoard app icons to a fixed 110 percent, adds a lightweight icon shadow, and requires no preferences or third-party tweak dependencies.
 Maintainer: moxuan1121
 Author: moxuan1121
 Section: Tweaks
