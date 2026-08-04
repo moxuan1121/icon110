@@ -73,3 +73,19 @@ static const CGFloat kIconScale = 1.10;
 }
 
 %end
+
+%hook SBIconListPageControl
+
+- (void)setHidden:(BOOL)hidden {
+    %orig(YES);
+}
+
+- (void)setAlpha:(CGFloat)alpha {
+    %orig(0.0);
+}
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    return nil;
+}
+
+%end
