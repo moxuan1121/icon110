@@ -10,7 +10,6 @@ typedef void (^Icon110Completion)(void);
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
-@property (nonatomic, strong) CALayer *shadowLayer;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
@@ -49,22 +48,6 @@ typedef void (^Icon110Completion)(void);
 - (void)didMoveToSuperview {
     %orig;
     [self _icon110ApplyScale];
-}
-
-- (void)layoutSubviews {
-    %orig;
-
-    // Hello Shadow ships a bitmap sized for the stock 100% icon. Match that
-    // existing layer to Icon110 so the enlarged icon does not cover it.
-    if ([self respondsToSelector:@selector(shadowLayer)]) {
-        CALayer *shadow = self.shadowLayer;
-        if (shadow) {
-            [CATransaction begin];
-            [CATransaction setDisableActions:YES];
-            shadow.transform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
-            [CATransaction commit];
-        }
-    }
 }
 
 %new

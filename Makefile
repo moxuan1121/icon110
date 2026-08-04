@@ -5,10 +5,13 @@ INSTALL_TARGET_PROCESSES := SpringBoard
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME := Icon110
+TWEAK_NAME := Icon110 IconShadow
 Icon110_FILES := Tweak.xm
 Icon110_CFLAGS := -fobjc-arc
 Icon110_FRAMEWORKS := UIKit QuartzCore
+IconShadow_FILES := IconShadow.xm
+IconShadow_CFLAGS := -fobjc-arc
+IconShadow_FRAMEWORKS := UIKit QuartzCore
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
