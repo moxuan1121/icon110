@@ -4,12 +4,39 @@
 static const CGFloat kIconScale = 1.10;
 static BOOL gIcon110FolderTransitionActive = NO;
 
+static UIImage *Icon110ShadowImage(void) {
+    static UIImage *image;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        CGSize size = CGSizeMake(120.0, 120.0);
+        CGRect iconRect = CGRectMake(30.0, 28.0, 60.0, 60.0);
+        UIGraphicsBeginImageContextWithOptions(size, NO, 3.0);
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:iconRect
+                                                        cornerRadius:13.5];
+
+        CGContextSaveGState(context);
+        CGContextSetShadowWithColor(context, CGSizeMake(0.0, 3.0), 6.0,
+                                    [UIColor colorWithWhite:0.0 alpha:0.45].CGColor);
+        [UIColor.blackColor setFill];
+        [path fill];
+        CGContextRestoreGState(context);
+
+        CGContextSetBlendMode(context, kCGBlendModeClear);
+        [path fill];
+        image = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+    });
+    return image;
+}
+
 typedef void (^Icon110Completion)(void);
 
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
+@property (nonatomic, strong) CALayer *icon110ShadowLayer;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (CGFloat)iconImageCornerRadius;
@@ -19,6 +46,8 @@ typedef void (^Icon110Completion)(void);
 @end
 
 %hook SBIconView
+
+%property (nonatomic, strong) CALayer *icon110ShadowLayer;
 
 // Folder transitions consult iconContentScale for both the collapsed folder
 // icon and its expanded contents. Expanded icons report 110% only while an
@@ -90,9 +119,7 @@ typedef void (^Icon110Completion)(void);
     if (!icon ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
-        UIView *container = self.contentContainerView;
-        container.layer.shadowOpacity = 0.0;
-        container.layer.shadowPath = nil;
+        self.icon110ShadowLayer.hidden = YES;
         return;
     }
 
@@ -103,24 +130,30 @@ typedef void (^Icon110Completion)(void);
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
+    // Clear the realtime Core Animation shadow used by 1.1.1/1.1.2. A static
+    // bitmap shadow does not get recomposited during SpringBoard transitions.
     container.layer.masksToBounds = NO;
-    container.layer.shadowColor = UIColor.blackColor.CGColor;
-    container.layer.shadowOpacity = 0.40;
-    container.layer.shadowRadius = 5.0;
-    container.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+    container.layer.shadowOpacity = 0.0;
+    container.layer.shadowPath = nil;
 
-    // Keep the shadow on the inner icon content layer. SpringBoard is free to
-    // animate the outer SBIconView as a folder/app transition container
-    // without making the shadow bounce with the folder background.
-    CGRect bounds = container.bounds;
-    CGFloat dx = CGRectGetWidth(bounds) * (kIconScale - 1.0) * 0.5;
-    CGFloat dy = CGRectGetHeight(bounds) * (kIconScale - 1.0) * 0.5;
-    CGRect shadowRect = CGRectInset(bounds, -dx, -dy);
-    CGFloat cornerRadius = [self respondsToSelector:@selector(iconImageCornerRadius)]
-        ? [self iconImageCornerRadius] * kIconScale
-        : 13.5;
-    container.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:shadowRect
-                                                            cornerRadius:cornerRadius].CGPath;
+    CALayer *shadowLayer = self.icon110ShadowLayer;
+    if (!shadowLayer) {
+        UIImage *shadowImage = Icon110ShadowImage();
+        shadowLayer = [CALayer layer];
+        shadowLayer.contents = (__bridge id)shadowImage.CGImage;
+        shadowLayer.contentsScale = shadowImage.scale;
+        shadowLayer.contentsGravity = kCAGravityResizeAspect;
+        shadowLayer.bounds = (CGRect){CGPointZero, shadowImage.size};
+        self.icon110ShadowLayer = shadowLayer;
+        [container.layer insertSublayer:shadowLayer atIndex:0];
+    } else if (shadowLayer.superlayer != container.layer) {
+        [shadowLayer removeFromSuperlayer];
+        [container.layer insertSublayer:shadowLayer atIndex:0];
+    }
+
+    shadowLayer.hidden = NO;
+    shadowLayer.position = CGPointMake(CGRectGetMidX(container.bounds),
+                                       CGRectGetMidY(container.bounds));
     [CATransaction commit];
 }
 
