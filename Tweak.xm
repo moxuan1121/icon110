@@ -6,7 +6,6 @@ static const CGFloat kIconScale = 1.10;
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
-@property (nonatomic, strong) NSString *location;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
@@ -15,16 +14,15 @@ static const CGFloat kIconScale = 1.10;
 
 %hook SBIconView
 
-// Folder transitions consult iconContentScale when handing views between the
-// collapsed folder icon and the expanded folder list. Keep both endpoints at
-// 110%, while leaving ordinary Home Screen app transitions completely stock.
+// Folder transitions consult iconContentScale for the collapsed folder icon.
+// Only that view reports 110%. Icons inside the folder already receive the
+// content-container scale below; reporting 110% again would produce 121%.
 - (CGFloat)iconContentScale {
     if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
         return %orig;
     }
 
-    BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
-    if ([self isFolderIcon] || isInsideFolder) {
+    if ([self isFolderIcon]) {
         return kIconScale;
     }
 

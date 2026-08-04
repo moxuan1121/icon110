@@ -12,8 +12,8 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - Scales only the inner `contentContainerView` layer. SpringBoard keeps full
   ownership of the outer app and folder transition transforms, preventing a
   110% to 100% handoff at either animation endpoint
-- Reports 110% only for collapsed folder icons and icons whose location is
-  inside a folder; ordinary Home Screen app transitions retain the stock scale
+- Reports 110% only for collapsed folder icons. Apps inside a folder keep the
+  single content-container scale, avoiding a compounded 121% return animation
 
 Build with Theos:
 
