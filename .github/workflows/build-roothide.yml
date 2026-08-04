@@ -31,6 +31,8 @@ jobs:
         run: |
           export THEOS="$HOME/theos-roothide"
           export THEOS_PACKAGE_SCHEME=roothide
+          ln -sfn /usr/lib/DynamicPatches/AutoPatches.dylib \
+            "layout/Library/MobileSubstrate/DynamicLibraries/0iconShadow.dylib.roothidepatch"
           gmake clean
           gmake package FINALPACKAGE=1
 

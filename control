@@ -1,8 +1,10 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.1.6
+Version: 1.0.10
 Architecture: iphoneos-arm
-Description: Enlarges SpringBoard app icons to a fixed 110 percent, adds a lightweight icon shadow, and requires no preferences or third-party tweak dependencies.
+Conflicts: com.wkk.iconshadow
+Replaces: com.wkk.iconshadow
+Description: Icon110 1.0.10 combined with the original Hello Shadow implementation, without a settings bundle.
 Maintainer: moxuan1121
 Author: moxuan1121
 Section: Tweaks

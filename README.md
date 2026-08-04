@@ -3,7 +3,7 @@
 A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 
 - Fixed app/folder icon scale: 110%
-- Fixed lightweight shadow beneath app and folder icons
+- Bundles the original Hello Shadow implementation supplied by the user
 - Widgets remain at the system scale
 - Application and folder labels are hidden
 - Home Screen and folder page dots are hidden, including their hit area
