@@ -90,8 +90,9 @@ typedef void (^Icon110Completion)(void);
     if (!icon ||
         [icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")] ||
         [icon isKindOfClass:NSClassFromString(@"SBHLibraryPodCategoryIcon")]) {
-        self.layer.shadowOpacity = 0.0;
-        self.layer.shadowPath = nil;
+        UIView *container = self.contentContainerView;
+        container.layer.shadowOpacity = 0.0;
+        container.layer.shadowPath = nil;
         return;
     }
 
@@ -102,23 +103,24 @@ typedef void (^Icon110Completion)(void);
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    self.layer.masksToBounds = NO;
-    self.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.layer.shadowOpacity = 0.40;
-    self.layer.shadowRadius = 5.0;
-    self.layer.shadowOffset = CGSizeMake(0.0, 2.0);
+    container.layer.masksToBounds = NO;
+    container.layer.shadowColor = UIColor.blackColor.CGColor;
+    container.layer.shadowOpacity = 0.40;
+    container.layer.shadowRadius = 5.0;
+    container.layer.shadowOffset = CGSizeMake(0.0, 2.0);
 
-    // sublayerTransform enlarges the icon contents but not the outer view's
-    // shadow path, so expand the path by the same fixed 110% here.
-    CGRect iconRect = [container convertRect:container.bounds toView:self];
-    CGFloat dx = CGRectGetWidth(iconRect) * (kIconScale - 1.0) * 0.5;
-    CGFloat dy = CGRectGetHeight(iconRect) * (kIconScale - 1.0) * 0.5;
-    CGRect shadowRect = CGRectInset(iconRect, -dx, -dy);
+    // Keep the shadow on the inner icon content layer. SpringBoard is free to
+    // animate the outer SBIconView as a folder/app transition container
+    // without making the shadow bounce with the folder background.
+    CGRect bounds = container.bounds;
+    CGFloat dx = CGRectGetWidth(bounds) * (kIconScale - 1.0) * 0.5;
+    CGFloat dy = CGRectGetHeight(bounds) * (kIconScale - 1.0) * 0.5;
+    CGRect shadowRect = CGRectInset(bounds, -dx, -dy);
     CGFloat cornerRadius = [self respondsToSelector:@selector(iconImageCornerRadius)]
         ? [self iconImageCornerRadius] * kIconScale
         : 13.5;
-    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:shadowRect
-                                                       cornerRadius:cornerRadius].CGPath;
+    container.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:shadowRect
+                                                            cornerRadius:cornerRadius].CGPath;
     [CATransaction commit];
 }
 
