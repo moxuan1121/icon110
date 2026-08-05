@@ -52,25 +52,24 @@ static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
     if (!iconView || !iconView.icon) return NO;
     NSString *iconClassName = NSStringFromClass([iconView.icon class]);
     NSString *location = iconView.location ?: @"";
-    if ([iconClassName containsString:@"Widget"] ||
-        [location containsString:@"Widget"] ||
-        [location containsString:@"Today"]) {
-        return NO;
-    }
-
-    // Widget icon views can report a leaf icon and no useful location on the
-    // Today page. Exclude them by their large bounds and widget host ancestry.
-    if (CGRectGetWidth(iconView.bounds) > 100.0 ||
-        CGRectGetHeight(iconView.bounds) > 100.0) {
-        return NO;
-    }
+    BOOL isWidget = [iconClassName containsString:@"Widget"] ||
+                    [location containsString:@"Widget"] ||
+                    CGRectGetWidth(iconView.bounds) > 100.0 ||
+                    CGRectGetHeight(iconView.bounds) > 100.0;
+    BOOL isTodayView = [location containsString:@"Today"];
     UIView *ancestor = iconView.superview;
     for (NSUInteger depth = 0; ancestor && depth < 12; depth++, ancestor = ancestor.superview) {
         NSString *ancestorClassName = NSStringFromClass([ancestor class]);
-        if ([ancestorClassName containsString:@"Widget"] ||
-            [ancestorClassName containsString:@"Today"]) {
-            return NO;
-        }
+        isWidget = isWidget || [ancestorClassName containsString:@"Widget"];
+        isTodayView = isTodayView || [ancestorClassName containsString:@"Today"];
+    }
+
+    if (isTodayView) return NO;
+    if (isWidget) {
+        // Only widgets whose location is confirmed as the root Home Screen
+        // receive 110%. An unresolved widget stays at 100% until layout gives
+        // it a root location, preventing Today widgets from being enlarged.
+        return [location containsString:@"Root"];
     }
     return YES;
 }
