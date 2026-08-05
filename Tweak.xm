@@ -78,12 +78,13 @@ static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *inter
 }
 
 static UITargetedPreview *Icon110AdjustedPreview(UITargetedPreview *preview,
-                                                  UIContextMenuInteraction *interaction) {
+                                                  UIContextMenuInteraction *interaction,
+                                                  BOOL adjustsFolder) {
     SBIconView *iconView = Icon110IconViewForInteraction(interaction);
     if (!Icon110ShouldScaleIconView(iconView)) {
         return preview;
     }
-    if ([iconView isFolderIcon]) {
+    if ([iconView isFolderIcon] && !adjustsFolder) {
         return preview;
     }
 
@@ -120,7 +121,7 @@ static UITargetedPreview *Icon110PreviewForHighlighting(id delegate,
     UITargetedPreview *preview = original
         ? original(delegate, selector, interaction, configuration)
         : nil;
-    return Icon110AdjustedPreview(preview, interaction);
+    return Icon110AdjustedPreview(preview, interaction, NO);
 }
 
 static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
@@ -134,7 +135,7 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
     UITargetedPreview *preview = original
         ? original(delegate, selector, interaction, configuration)
         : nil;
-    return Icon110AdjustedPreview(preview, interaction);
+    return Icon110AdjustedPreview(preview, interaction, YES);
 }
 
 static void Icon110InstallPreviewHook(Class delegateClass,
