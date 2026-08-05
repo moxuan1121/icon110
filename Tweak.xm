@@ -7,9 +7,11 @@ static BOOL gIcon110FolderTransitionActive = NO;
 
 typedef void (^Icon110Completion)(void);
 typedef UITargetedPreview *(*Icon110PreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
+typedef void (*Icon110MenuEndIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *, id<UIContextMenuInteractionAnimating>);
 
 static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalHighlightPreviewIMPs;
 static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalDismissPreviewIMPs;
+static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalMenuEndIMPs;
 static NSMutableSet<NSString *> *gIcon110HookedContextMenuDelegateClasses;
 
 static void Icon110PrepareContextMenuHookStorage(void) {
@@ -17,6 +19,7 @@ static void Icon110PrepareContextMenuHookStorage(void) {
     dispatch_once(&onceToken, ^{
         gIcon110OriginalHighlightPreviewIMPs = [NSMutableDictionary dictionary];
         gIcon110OriginalDismissPreviewIMPs = [NSMutableDictionary dictionary];
+        gIcon110OriginalMenuEndIMPs = [NSMutableDictionary dictionary];
         gIcon110HookedContextMenuDelegateClasses = [NSMutableSet set];
     });
 }
@@ -97,6 +100,34 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
     return Icon110AdjustedPreview(preview, interaction);
 }
 
+static void Icon110MenuWillEnd(id delegate,
+                               SEL selector,
+                               UIContextMenuInteraction *interaction,
+                               UIContextMenuConfiguration *configuration,
+                               id<UIContextMenuInteractionAnimating> animator) {
+    Icon110PrepareContextMenuHookStorage();
+    NSString *className = NSStringFromClass([delegate class]);
+    Icon110MenuEndIMP original = (Icon110MenuEndIMP)
+        [gIcon110OriginalMenuEndIMPs[className] pointerValue];
+    if (original) {
+        original(delegate, selector, interaction, configuration, animator);
+    }
+
+    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
+    if (!iconView || ![iconView isFolderIcon]) return;
+
+    __weak SBIconView *weakIconView = iconView;
+    [animator addCompletion:^{
+        SBIconView *strongIconView = weakIconView;
+        if (!strongIconView) return;
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        strongIconView.transform = CGAffineTransformIdentity;
+        [strongIconView _icon110ApplyScale];
+        [CATransaction commit];
+    }];
+}
+
 static void Icon110InstallPreviewHook(Class delegateClass,
                                       NSString *className,
                                       SEL selector,
@@ -118,6 +149,25 @@ static void Icon110InstallPreviewHook(Class delegateClass,
     }
 }
 
+static void Icon110InstallMenuEndHook(Class delegateClass, NSString *className) {
+    SEL selector = @selector(contextMenuInteraction:willEndForConfiguration:animator:);
+    Method inheritedMethod = class_getInstanceMethod(delegateClass, selector);
+    const char *types = inheritedMethod ? method_getTypeEncoding(inheritedMethod) : "v@:@@@";
+    IMP inheritedIMP = inheritedMethod ? method_getImplementation(inheritedMethod) : NULL;
+
+    IMP original = NULL;
+    if (class_addMethod(delegateClass, selector, (IMP)Icon110MenuWillEnd, types)) {
+        original = inheritedIMP;
+    } else {
+        Method method = class_getInstanceMethod(delegateClass, selector);
+        original = method_setImplementation(method, (IMP)Icon110MenuWillEnd);
+    }
+    if (original) {
+        gIcon110OriginalMenuEndIMPs[className] =
+            [NSValue valueWithPointer:(const void *)original];
+    }
+}
+
 static void Icon110HookContextMenuDelegate(id delegate) {
     if (!delegate) return;
 
@@ -133,6 +183,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     Icon110InstallPreviewHook(delegateClass, className,
         @selector(contextMenuInteraction:previewForDismissingMenuWithConfiguration:),
         (IMP)Icon110PreviewForDismissal, gIcon110OriginalDismissPreviewIMPs);
+    Icon110InstallMenuEndHook(delegateClass, className);
 }
 
 %hook SBIconView
