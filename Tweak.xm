@@ -7,11 +7,9 @@ static BOOL gIcon110FolderTransitionActive = NO;
 
 typedef void (^Icon110Completion)(void);
 typedef UITargetedPreview *(*Icon110PreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
-typedef void (*Icon110MenuEndIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *, id<UIContextMenuInteractionAnimating>);
 
 static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalHighlightPreviewIMPs;
 static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalDismissPreviewIMPs;
-static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalMenuEndIMPs;
 static NSMutableSet<NSString *> *gIcon110HookedContextMenuDelegateClasses;
 
 static void Icon110PrepareContextMenuHookStorage(void) {
@@ -19,7 +17,6 @@ static void Icon110PrepareContextMenuHookStorage(void) {
     dispatch_once(&onceToken, ^{
         gIcon110OriginalHighlightPreviewIMPs = [NSMutableDictionary dictionary];
         gIcon110OriginalDismissPreviewIMPs = [NSMutableDictionary dictionary];
-        gIcon110OriginalMenuEndIMPs = [NSMutableDictionary dictionary];
         gIcon110HookedContextMenuDelegateClasses = [NSMutableSet set];
     });
 }
@@ -28,6 +25,8 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
+@property (nonatomic, assign) BOOL icon110ScaleApplied;
+@property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
@@ -91,6 +90,9 @@ static UITargetedPreview *Icon110AdjustedPreview(UITargetedPreview *preview,
     if (!Icon110ShouldScaleIconView(iconView)) {
         return preview;
     }
+    if ([iconView isFolderIcon]) {
+        return preview;
+    }
 
     UIView *sourceView = preview.view ?: iconView.contentContainerView;
     UIView *container = preview.target.container ?: iconView.superview;
@@ -142,36 +144,6 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
     return Icon110AdjustedPreview(preview, interaction);
 }
 
-static void Icon110MenuWillEnd(id delegate,
-                               SEL selector,
-                               UIContextMenuInteraction *interaction,
-                               UIContextMenuConfiguration *configuration,
-                               id<UIContextMenuInteractionAnimating> animator) {
-    Icon110PrepareContextMenuHookStorage();
-    NSString *className = NSStringFromClass([delegate class]);
-    Icon110MenuEndIMP original = (Icon110MenuEndIMP)
-        [gIcon110OriginalMenuEndIMPs[className] pointerValue];
-    if (original) {
-        original(delegate, selector, interaction, configuration, animator);
-    }
-
-    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
-    if (!iconView || ![iconView isFolderIcon]) return;
-
-    __weak SBIconView *weakIconView = iconView;
-    void (^restoreFolderScale)(void) = ^{
-        SBIconView *strongIconView = weakIconView;
-        if (!strongIconView) return;
-        strongIconView.transform = CGAffineTransformIdentity;
-        strongIconView.contentContainerView.transform = CGAffineTransformIdentity;
-        [strongIconView _icon110ApplyScale];
-    };
-    // Restore the real icon while UIKit's dismissal preview is still covering
-    // it. The visible preview provides the transition, so the handoff reaches
-    // an already-correct 110% icon without a second, delayed animation.
-    [UIView performWithoutAnimation:restoreFolderScale];
-}
-
 static void Icon110InstallPreviewHook(Class delegateClass,
                                       NSString *className,
                                       SEL selector,
@@ -193,25 +165,6 @@ static void Icon110InstallPreviewHook(Class delegateClass,
     }
 }
 
-static void Icon110InstallMenuEndHook(Class delegateClass, NSString *className) {
-    SEL selector = @selector(contextMenuInteraction:willEndForConfiguration:animator:);
-    Method inheritedMethod = class_getInstanceMethod(delegateClass, selector);
-    const char *types = inheritedMethod ? method_getTypeEncoding(inheritedMethod) : "v@:@@@";
-    IMP inheritedIMP = inheritedMethod ? method_getImplementation(inheritedMethod) : NULL;
-
-    IMP original = NULL;
-    if (class_addMethod(delegateClass, selector, (IMP)Icon110MenuWillEnd, types)) {
-        original = inheritedIMP;
-    } else {
-        Method method = class_getInstanceMethod(delegateClass, selector);
-        original = method_setImplementation(method, (IMP)Icon110MenuWillEnd);
-    }
-    if (original) {
-        gIcon110OriginalMenuEndIMPs[className] =
-            [NSValue valueWithPointer:(const void *)original];
-    }
-}
-
 static void Icon110HookContextMenuDelegate(id delegate) {
     if (!delegate) return;
 
@@ -227,10 +180,12 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     Icon110InstallPreviewHook(delegateClass, className,
         @selector(contextMenuInteraction:previewForDismissingMenuWithConfiguration:),
         (IMP)Icon110PreviewForDismissal, gIcon110OriginalDismissPreviewIMPs);
-    Icon110InstallMenuEndHook(delegateClass, className);
 }
 
 %hook SBIconView
+
+%property (nonatomic, assign) BOOL icon110ScaleApplied;
+%property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 
 - (CGFloat)iconContentScale {
     if (!Icon110ShouldScaleIconView(self)) {
@@ -264,17 +219,29 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)layoutSubviews {
     %orig;
+    [self _icon110ApplyScale];
     [self _icon110HideLabel];
 }
 
 %new
 - (void)_icon110ApplyScale {
-    if (!Icon110ShouldScaleIconView(self)) {
-        return;
-    }
-
     UIView *container = self.contentContainerView;
     if (!container) return;
+
+    if (!Icon110ShouldScaleIconView(self)) {
+        if (self.icon110ScaleApplied) {
+            CATransform3D originalTransform = self.icon110OriginalSublayerTransform
+                ? [self.icon110OriginalSublayerTransform CATransform3DValue]
+                : CATransform3DIdentity;
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES];
+            container.layer.sublayerTransform = originalTransform;
+            [CATransaction commit];
+            self.icon110ScaleApplied = NO;
+            self.icon110OriginalSublayerTransform = nil;
+        }
+        return;
+    }
 
     CATransform3D transform = container.layer.sublayerTransform;
     if (fabs(transform.m11 - kIconScale) < 0.001 &&
@@ -284,8 +251,12 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
+    if (!self.icon110ScaleApplied) {
+        self.icon110OriginalSublayerTransform = [NSValue valueWithCATransform3D:transform];
+    }
     container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
+    self.icon110ScaleApplied = YES;
 }
 
 %new
