@@ -1,39 +1,114 @@
 #import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 #import <math.h>
 
 static const CGFloat kIconScale = 1.10;
 static BOOL gIcon110FolderTransitionActive = NO;
 
 typedef void (^Icon110Completion)(void);
+typedef UITargetedPreview *(*Icon110DismissPreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
+
+static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalDismissPreviewIMPs;
+static NSMutableSet<NSString *> *gIcon110HookedContextMenuDelegateClasses;
+
+static void Icon110PrepareContextMenuHookStorage(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        gIcon110OriginalDismissPreviewIMPs = [NSMutableDictionary dictionary];
+        gIcon110HookedContextMenuDelegateClasses = [NSMutableSet set];
+    });
+}
 
 @interface SBIconView : UIView
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
-@property (nonatomic, assign) BOOL icon110ContextMenuDismissing;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
-- (void)_icon110BeginContextMenuDismissal;
-- (void)_icon110EndContextMenuDismissal;
 @end
+
+static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *interaction) {
+    UIView *candidate = interaction.view;
+    Class iconViewClass = NSClassFromString(@"SBIconView");
+    while (candidate && ![candidate isKindOfClass:iconViewClass]) {
+        candidate = candidate.superview;
+    }
+    return (SBIconView *)candidate;
+}
+
+static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
+                                                      SEL selector,
+                                                      UIContextMenuInteraction *interaction,
+                                                      UIContextMenuConfiguration *configuration) {
+    Icon110PrepareContextMenuHookStorage();
+    NSString *className = NSStringFromClass([delegate class]);
+    Icon110DismissPreviewIMP original = (Icon110DismissPreviewIMP)
+        [gIcon110OriginalDismissPreviewIMPs[className] pointerValue];
+    UITargetedPreview *preview = original
+        ? original(delegate, selector, interaction, configuration)
+        : nil;
+
+    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
+    if (!iconView || [iconView.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+        return preview;
+    }
+
+    UIView *sourceView = preview.view ?: iconView.contentContainerView;
+    UIView *container = preview.target.container ?: iconView.superview;
+    if (!sourceView || !container) return preview;
+
+    CGPoint center = preview
+        ? preview.target.center
+        : [container convertPoint:iconView.center fromView:iconView.superview];
+    CGAffineTransform transform = preview
+        ? preview.target.transform
+        : CGAffineTransformIdentity;
+    transform = CGAffineTransformConcat(transform,
+                                        CGAffineTransformMakeScale(kIconScale, kIconScale));
+
+    UIPreviewTarget *target = [[UIPreviewTarget alloc] initWithContainer:container
+                                                                  center:center
+                                                               transform:transform];
+    UIPreviewParameters *parameters = preview.parameters ?: [UIPreviewParameters new];
+    return [[UITargetedPreview alloc] initWithView:sourceView
+                                        parameters:parameters
+                                            target:target];
+}
+
+static void Icon110HookContextMenuDelegate(id delegate) {
+    if (!delegate) return;
+
+    Icon110PrepareContextMenuHookStorage();
+    Class delegateClass = [delegate class];
+    NSString *className = NSStringFromClass(delegateClass);
+    if ([gIcon110HookedContextMenuDelegateClasses containsObject:className]) return;
+    [gIcon110HookedContextMenuDelegateClasses addObject:className];
+
+    SEL selector = @selector(contextMenuInteraction:previewForDismissingMenuWithConfiguration:);
+    Method inheritedMethod = class_getInstanceMethod(delegateClass, selector);
+    const char *types = inheritedMethod ? method_getTypeEncoding(inheritedMethod) : "@@:@@";
+    IMP inheritedIMP = inheritedMethod ? method_getImplementation(inheritedMethod) : NULL;
+
+    if (class_addMethod(delegateClass, selector, (IMP)Icon110PreviewForDismissal, types)) {
+        if (inheritedIMP) {
+            gIcon110OriginalDismissPreviewIMPs[className] = [NSValue valueWithPointer:inheritedIMP];
+        }
+    } else {
+        Method method = class_getInstanceMethod(delegateClass, selector);
+        IMP original = method_setImplementation(method, (IMP)Icon110PreviewForDismissal);
+        if (original) {
+            gIcon110OriginalDismissPreviewIMPs[className] = [NSValue valueWithPointer:original];
+        }
+    }
+}
 
 %hook SBIconView
 
-%property (nonatomic, assign) BOOL icon110ContextMenuDismissing;
-
-// Folder transitions consult iconContentScale for both the collapsed folder
-// icon and its expanded contents. Expanded icons report 110% only while an
-// actual folder push/pop is active; app-to-folder returns stay at the system
-// value and therefore do not compound the content-container scale.
 - (CGFloat)iconContentScale {
     if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
         return %orig;
-    }
-
-    if (self.icon110ContextMenuDismissing) {
-        return kIconScale;
     }
 
     BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
@@ -44,7 +119,6 @@ typedef void (^Icon110Completion)(void);
     return %orig;
 }
 
-// Remove application and folder labels without a settings dependency.
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
 }
@@ -66,9 +140,7 @@ typedef void (^Icon110Completion)(void);
     }
 
     UIView *container = self.contentContainerView;
-    if (!container) {
-        return;
-    }
+    if (!container) return;
 
     CATransform3D transform = container.layer.sublayerTransform;
     if (fabs(transform.m11 - kIconScale) < 0.001 &&
@@ -76,61 +148,20 @@ typedef void (^Icon110Completion)(void);
         return;
     }
 
-    // SpringBoard animates the outer SBIconView for app and folder
-    // transitions. Scaling only this inner content layer keeps the native
-    // transition model untouched and prevents a 110% -> 100% handoff.
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
 }
 
-%new
-- (void)_icon110BeginContextMenuDismissal {
-    if (self.icon110ContextMenuDismissing) return;
-
-    self.icon110ContextMenuDismissing = YES;
-    UIView *container = self.contentContainerView;
-    if (!container) return;
-
-    // During dismissal SpringBoard asks iconContentScale for the temporary
-    // context-menu snapshot. Let the system provide 110% and temporarily
-    // remove our separate 110% layer so the two scales do not compound.
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    container.layer.sublayerTransform = CATransform3DIdentity;
-    [CATransaction commit];
-}
-
-%new
-- (void)_icon110EndContextMenuDismissal {
-    if (!self.icon110ContextMenuDismissing) return;
-    self.icon110ContextMenuDismissing = NO;
-    [self _icon110ApplyScale];
-}
-
 %end
 
 %hook UIContextMenuInteraction
 
-- (void)dismissMenu {
-    UIView *candidate = self.view;
-    Class iconViewClass = NSClassFromString(@"SBIconView");
-    while (candidate && ![candidate isKindOfClass:iconViewClass]) {
-        candidate = candidate.superview;
-    }
-
-    SBIconView *iconView = (SBIconView *)candidate;
-    [iconView _icon110BeginContextMenuDismissal];
-    %orig;
-
-    if (iconView) {
-        __weak SBIconView *weakIconView = iconView;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [weakIconView _icon110EndContextMenuDismissal];
-        });
-    }
+- (instancetype)initWithDelegate:(id<UIContextMenuInteractionDelegate>)delegate {
+    UIContextMenuInteraction *interaction = %orig(delegate);
+    Icon110HookContextMenuDelegate(delegate);
+    return interaction;
 }
 
 %end
