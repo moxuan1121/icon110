@@ -32,7 +32,22 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
+- (void)_icon110HideLabel;
 @end
+
+static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
+    if (!view || depth > 3) return;
+    for (UIView *subview in view.subviews) {
+        NSString *className = NSStringFromClass([subview class]);
+        if ([className containsString:@"IconLabel"] ||
+            [className containsString:@"LabelView"]) {
+            subview.hidden = YES;
+            subview.alpha = 0.0;
+        } else {
+            Icon110HideLabelSubviews(subview, depth + 1);
+        }
+    }
+}
 
 static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
     if (!iconView || !iconView.icon) return NO;
@@ -42,6 +57,21 @@ static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
         [location containsString:@"Widget"] ||
         [location containsString:@"Today"]) {
         return NO;
+    }
+
+    // Widget icon views can report a leaf icon and no useful location on the
+    // Today page. Exclude them by their large bounds and widget host ancestry.
+    if (CGRectGetWidth(iconView.bounds) > 100.0 ||
+        CGRectGetHeight(iconView.bounds) > 100.0) {
+        return NO;
+    }
+    UIView *ancestor = iconView.superview;
+    for (NSUInteger depth = 0; ancestor && depth < 12; depth++, ancestor = ancestor.superview) {
+        NSString *ancestorClassName = NSStringFromClass([ancestor class]);
+        if ([ancestorClassName containsString:@"Widget"] ||
+            [ancestorClassName containsString:@"Today"]) {
+            return NO;
+        }
     }
     return YES;
 }
@@ -132,18 +162,20 @@ static void Icon110MenuWillEnd(id delegate,
     void (^restoreFolderScale)(void) = ^{
         SBIconView *strongIconView = weakIconView;
         if (!strongIconView) return;
-        [CATransaction begin];
-        [CATransaction setDisableActions:YES];
         strongIconView.transform = CGAffineTransformIdentity;
         strongIconView.contentContainerView.transform = CGAffineTransformIdentity;
-        [strongIconView _updateIconImageViewAnimated:NO];
         [strongIconView _icon110ApplyScale];
-        [CATransaction commit];
     };
     if (animator) {
-        [animator addCompletion:restoreFolderScale];
+        [animator addAnimations:restoreFolderScale];
+        [animator addCompletion:^{
+            [CATransaction begin];
+            [CATransaction setDisableActions:YES];
+            restoreFolderScale();
+            [CATransaction commit];
+        }];
     } else {
-        restoreFolderScale();
+        [UIView performWithoutAnimation:restoreFolderScale];
     }
 }
 
@@ -222,16 +254,24 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
+    [self _icon110HideLabel];
 }
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
     %orig(animated);
     [self _icon110ApplyScale];
+    [self _icon110HideLabel];
 }
 
 - (void)didMoveToSuperview {
     %orig;
     [self _icon110ApplyScale];
+    [self _icon110HideLabel];
+}
+
+- (void)layoutSubviews {
+    %orig;
+    [self _icon110HideLabel];
 }
 
 %new
@@ -253,6 +293,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     [CATransaction setDisableActions:YES];
     container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
+}
+
+%new
+- (void)_icon110HideLabel {
+    Icon110HideLabelSubviews(self, 0);
 }
 
 %end
