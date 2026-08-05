@@ -187,7 +187,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
-    if (gIcon110FolderTransitionActive && isInsideFolder) {
+    if (gIcon110FolderTransitionActive && ([self isFolderIcon] || isInsideFolder)) {
         return kIconScale;
     }
 
