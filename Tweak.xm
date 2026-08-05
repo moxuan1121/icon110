@@ -93,13 +93,15 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
     if (class_addMethod(delegateClass, selector, (IMP)Icon110PreviewForDismissal, types)) {
         if (inheritedIMP) {
-            gIcon110OriginalDismissPreviewIMPs[className] = [NSValue valueWithPointer:inheritedIMP];
+            gIcon110OriginalDismissPreviewIMPs[className] =
+                [NSValue valueWithPointer:(const void *)inheritedIMP];
         }
     } else {
         Method method = class_getInstanceMethod(delegateClass, selector);
         IMP original = method_setImplementation(method, (IMP)Icon110PreviewForDismissal);
         if (original) {
-            gIcon110OriginalDismissPreviewIMPs[className] = [NSValue valueWithPointer:original];
+            gIcon110OriginalDismissPreviewIMPs[className] =
+                [NSValue valueWithPointer:(const void *)original];
         }
     }
 }

@@ -1,6 +1,6 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.14
+Version: 1.0.15
 Architecture: iphoneos-arm
 Description: Fixed 110% icon scaling with smooth long-press and transition behavior, with labels and page dots removed.
 Maintainer: moxuan1121
