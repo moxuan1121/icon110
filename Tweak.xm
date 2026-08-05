@@ -192,7 +192,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
-    if ([self isFolderIcon] || (gIcon110FolderTransitionActive && isInsideFolder)) {
+    if (gIcon110FolderTransitionActive && isInsideFolder) {
         return kIconScale;
     }
 
@@ -227,10 +227,10 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     UIView *container = self.contentContainerView;
     if (!container) return;
 
-    // Folder icons already obtain 110% through iconContentScale. Applying a
-    // second sublayer scale makes context-menu highlighting compound to about
-    // 125%, then leaves UIKit alternating between the two scale states.
-    BOOL shouldUseSublayerScale = Icon110ShouldScaleIconView(self) && ![self isFolderIcon];
+    // Static icons, including folder icons, use one sublayer scale. Folder
+    // context-menu previews are excluded separately, so no second 1.10 is
+    // compounded during highlighting or dismissal.
+    BOOL shouldUseSublayerScale = Icon110ShouldScaleIconView(self);
     if (!shouldUseSublayerScale) {
         if (self.icon110ScaleApplied) {
             CATransform3D originalTransform = self.icon110OriginalSublayerTransform
