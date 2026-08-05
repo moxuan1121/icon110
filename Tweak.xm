@@ -40,17 +40,18 @@ typedef void (^Icon110Completion)(void);
     %orig(NO);
 }
 
-- (void)layoutSubviews {
-    %orig;
-    // Long-press/editing mode rebuilds the icon image during layout and can
-    // briefly restore the inner container to 100%. Correct it in the same
-    // layout pass, before Core Animation presents that intermediate frame.
-    [self _icon110ApplyScale];
-}
-
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
-    %orig(animated);
+    // Long press rebuilds the inner image view with an explicit animation.
+    // That animation captures the system 100% state before our 110% layer
+    // scale is restored, so correcting layout afterwards is too late. Keep
+    // the outer SpringBoard interaction animation, but make this internal
+    // image refresh atomic at the already-established 110% scale.
     [self _icon110ApplyScale];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    %orig(NO);
+    [self _icon110ApplyScale];
+    [CATransaction commit];
 }
 
 - (void)didMoveToSuperview {
