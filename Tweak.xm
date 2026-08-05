@@ -77,6 +77,20 @@ static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *inter
     return (SBIconView *)candidate;
 }
 
+static Icon110PreviewIMP Icon110OriginalPreviewIMPForDelegate(
+    id delegate,
+    NSMutableDictionary<NSString *, NSValue *> *originals) {
+    for (Class currentClass = [delegate class];
+         currentClass;
+         currentClass = class_getSuperclass(currentClass)) {
+        NSValue *storedIMP = originals[NSStringFromClass(currentClass)];
+        if (storedIMP) {
+            return (Icon110PreviewIMP)[storedIMP pointerValue];
+        }
+    }
+    return NULL;
+}
+
 static UITargetedPreview *Icon110AdjustedPreview(UITargetedPreview *preview,
                                                   UIContextMenuInteraction *interaction,
                                                   BOOL adjustsFolder) {
@@ -115,9 +129,8 @@ static UITargetedPreview *Icon110PreviewForHighlighting(id delegate,
                                                          UIContextMenuInteraction *interaction,
                                                          UIContextMenuConfiguration *configuration) {
     Icon110PrepareContextMenuHookStorage();
-    NSString *className = NSStringFromClass([delegate class]);
-    Icon110PreviewIMP original = (Icon110PreviewIMP)
-        [gIcon110OriginalHighlightPreviewIMPs[className] pointerValue];
+    Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
+        delegate, gIcon110OriginalHighlightPreviewIMPs);
     UITargetedPreview *preview = original
         ? original(delegate, selector, interaction, configuration)
         : nil;
@@ -129,9 +142,8 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
                                                       UIContextMenuInteraction *interaction,
                                                       UIContextMenuConfiguration *configuration) {
     Icon110PrepareContextMenuHookStorage();
-    NSString *className = NSStringFromClass([delegate class]);
-    Icon110PreviewIMP original = (Icon110PreviewIMP)
-        [gIcon110OriginalDismissPreviewIMPs[className] pointerValue];
+    Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
+        delegate, gIcon110OriginalDismissPreviewIMPs);
     UITargetedPreview *preview = original
         ? original(delegate, selector, interaction, configuration)
         : nil;
@@ -154,7 +166,10 @@ static void Icon110InstallPreviewHook(Class delegateClass,
         Method method = class_getInstanceMethod(delegateClass, selector);
         original = method_setImplementation(method, replacement);
     }
-    if (original) {
+    // A subclass may inherit our replacement from a previously hooked parent.
+    // Do not record that replacement as its original implementation; callback
+    // lookup will continue up the class hierarchy to the real original IMP.
+    if (original && original != replacement) {
         originals[className] = [NSValue valueWithPointer:(const void *)original];
     }
 }
