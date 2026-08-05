@@ -34,6 +34,18 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110ApplyScale;
 @end
 
+static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
+    if (!iconView || !iconView.icon) return NO;
+    NSString *iconClassName = NSStringFromClass([iconView.icon class]);
+    NSString *location = iconView.location ?: @"";
+    if ([iconClassName containsString:@"Widget"] ||
+        [location containsString:@"Widget"] ||
+        [location containsString:@"Today"]) {
+        return NO;
+    }
+    return YES;
+}
+
 static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *interaction) {
     UIView *candidate = interaction.view;
     Class iconViewClass = NSClassFromString(@"SBIconView");
@@ -46,7 +58,7 @@ static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *inter
 static UITargetedPreview *Icon110AdjustedPreview(UITargetedPreview *preview,
                                                   UIContextMenuInteraction *interaction) {
     SBIconView *iconView = Icon110IconViewForInteraction(interaction);
-    if (!iconView || [iconView.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+    if (!Icon110ShouldScaleIconView(iconView)) {
         return preview;
     }
 
@@ -117,15 +129,22 @@ static void Icon110MenuWillEnd(id delegate,
     if (!iconView || ![iconView isFolderIcon]) return;
 
     __weak SBIconView *weakIconView = iconView;
-    [animator addCompletion:^{
+    void (^restoreFolderScale)(void) = ^{
         SBIconView *strongIconView = weakIconView;
         if (!strongIconView) return;
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
         strongIconView.transform = CGAffineTransformIdentity;
+        strongIconView.contentContainerView.transform = CGAffineTransformIdentity;
+        [strongIconView _updateIconImageViewAnimated:NO];
         [strongIconView _icon110ApplyScale];
         [CATransaction commit];
-    }];
+    };
+    if (animator) {
+        [animator addCompletion:restoreFolderScale];
+    } else {
+        restoreFolderScale();
+    }
 }
 
 static void Icon110InstallPreviewHook(Class delegateClass,
@@ -189,7 +208,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 %hook SBIconView
 
 - (CGFloat)iconContentScale {
-    if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+    if (!Icon110ShouldScaleIconView(self)) {
         return %orig;
     }
 
@@ -217,7 +236,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %new
 - (void)_icon110ApplyScale {
-    if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
+    if (!Icon110ShouldScaleIconView(self)) {
         return;
     }
 
