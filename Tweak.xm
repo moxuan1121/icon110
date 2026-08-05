@@ -6,14 +6,16 @@ static const CGFloat kIconScale = 1.10;
 static BOOL gIcon110FolderTransitionActive = NO;
 
 typedef void (^Icon110Completion)(void);
-typedef UITargetedPreview *(*Icon110DismissPreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
+typedef UITargetedPreview *(*Icon110PreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
 
+static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalHighlightPreviewIMPs;
 static NSMutableDictionary<NSString *, NSValue *> *gIcon110OriginalDismissPreviewIMPs;
 static NSMutableSet<NSString *> *gIcon110HookedContextMenuDelegateClasses;
 
 static void Icon110PrepareContextMenuHookStorage(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        gIcon110OriginalHighlightPreviewIMPs = [NSMutableDictionary dictionary];
         gIcon110OriginalDismissPreviewIMPs = [NSMutableDictionary dictionary];
         gIcon110HookedContextMenuDelegateClasses = [NSMutableSet set];
     });
@@ -38,18 +40,8 @@ static SBIconView *Icon110IconViewForInteraction(UIContextMenuInteraction *inter
     return (SBIconView *)candidate;
 }
 
-static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
-                                                      SEL selector,
-                                                      UIContextMenuInteraction *interaction,
-                                                      UIContextMenuConfiguration *configuration) {
-    Icon110PrepareContextMenuHookStorage();
-    NSString *className = NSStringFromClass([delegate class]);
-    Icon110DismissPreviewIMP original = (Icon110DismissPreviewIMP)
-        [gIcon110OriginalDismissPreviewIMPs[className] pointerValue];
-    UITargetedPreview *preview = original
-        ? original(delegate, selector, interaction, configuration)
-        : nil;
-
+static UITargetedPreview *Icon110AdjustedPreview(UITargetedPreview *preview,
+                                                  UIContextMenuInteraction *interaction) {
     SBIconView *iconView = Icon110IconViewForInteraction(interaction);
     if (!iconView || [iconView.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
         return preview;
@@ -77,6 +69,55 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
                                             target:target];
 }
 
+static UITargetedPreview *Icon110PreviewForHighlighting(id delegate,
+                                                         SEL selector,
+                                                         UIContextMenuInteraction *interaction,
+                                                         UIContextMenuConfiguration *configuration) {
+    Icon110PrepareContextMenuHookStorage();
+    NSString *className = NSStringFromClass([delegate class]);
+    Icon110PreviewIMP original = (Icon110PreviewIMP)
+        [gIcon110OriginalHighlightPreviewIMPs[className] pointerValue];
+    UITargetedPreview *preview = original
+        ? original(delegate, selector, interaction, configuration)
+        : nil;
+    return Icon110AdjustedPreview(preview, interaction);
+}
+
+static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
+                                                      SEL selector,
+                                                      UIContextMenuInteraction *interaction,
+                                                      UIContextMenuConfiguration *configuration) {
+    Icon110PrepareContextMenuHookStorage();
+    NSString *className = NSStringFromClass([delegate class]);
+    Icon110PreviewIMP original = (Icon110PreviewIMP)
+        [gIcon110OriginalDismissPreviewIMPs[className] pointerValue];
+    UITargetedPreview *preview = original
+        ? original(delegate, selector, interaction, configuration)
+        : nil;
+    return Icon110AdjustedPreview(preview, interaction);
+}
+
+static void Icon110InstallPreviewHook(Class delegateClass,
+                                      NSString *className,
+                                      SEL selector,
+                                      IMP replacement,
+                                      NSMutableDictionary<NSString *, NSValue *> *originals) {
+    Method inheritedMethod = class_getInstanceMethod(delegateClass, selector);
+    const char *types = inheritedMethod ? method_getTypeEncoding(inheritedMethod) : "@@:@@";
+    IMP inheritedIMP = inheritedMethod ? method_getImplementation(inheritedMethod) : NULL;
+
+    IMP original = NULL;
+    if (class_addMethod(delegateClass, selector, replacement, types)) {
+        original = inheritedIMP;
+    } else {
+        Method method = class_getInstanceMethod(delegateClass, selector);
+        original = method_setImplementation(method, replacement);
+    }
+    if (original) {
+        originals[className] = [NSValue valueWithPointer:(const void *)original];
+    }
+}
+
 static void Icon110HookContextMenuDelegate(id delegate) {
     if (!delegate) return;
 
@@ -86,24 +127,12 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     if ([gIcon110HookedContextMenuDelegateClasses containsObject:className]) return;
     [gIcon110HookedContextMenuDelegateClasses addObject:className];
 
-    SEL selector = @selector(contextMenuInteraction:previewForDismissingMenuWithConfiguration:);
-    Method inheritedMethod = class_getInstanceMethod(delegateClass, selector);
-    const char *types = inheritedMethod ? method_getTypeEncoding(inheritedMethod) : "@@:@@";
-    IMP inheritedIMP = inheritedMethod ? method_getImplementation(inheritedMethod) : NULL;
-
-    if (class_addMethod(delegateClass, selector, (IMP)Icon110PreviewForDismissal, types)) {
-        if (inheritedIMP) {
-            gIcon110OriginalDismissPreviewIMPs[className] =
-                [NSValue valueWithPointer:(const void *)inheritedIMP];
-        }
-    } else {
-        Method method = class_getInstanceMethod(delegateClass, selector);
-        IMP original = method_setImplementation(method, (IMP)Icon110PreviewForDismissal);
-        if (original) {
-            gIcon110OriginalDismissPreviewIMPs[className] =
-                [NSValue valueWithPointer:(const void *)original];
-        }
-    }
+    Icon110InstallPreviewHook(delegateClass, className,
+        @selector(contextMenuInteraction:previewForHighlightingMenuWithConfiguration:),
+        (IMP)Icon110PreviewForHighlighting, gIcon110OriginalHighlightPreviewIMPs);
+    Icon110InstallPreviewHook(delegateClass, className,
+        @selector(contextMenuInteraction:previewForDismissingMenuWithConfiguration:),
+        (IMP)Icon110PreviewForDismissal, gIcon110OriginalDismissPreviewIMPs);
 }
 
 %hook SBIconView
