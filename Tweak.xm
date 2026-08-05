@@ -166,17 +166,10 @@ static void Icon110MenuWillEnd(id delegate,
         strongIconView.contentContainerView.transform = CGAffineTransformIdentity;
         [strongIconView _icon110ApplyScale];
     };
-    if (animator) {
-        [animator addAnimations:restoreFolderScale];
-        [animator addCompletion:^{
-            [CATransaction begin];
-            [CATransaction setDisableActions:YES];
-            restoreFolderScale();
-            [CATransaction commit];
-        }];
-    } else {
-        [UIView performWithoutAnimation:restoreFolderScale];
-    }
+    // Restore the real icon while UIKit's dismissal preview is still covering
+    // it. The visible preview provides the transition, so the handoff reaches
+    // an already-correct 110% icon without a second, delayed animation.
+    [UIView performWithoutAnimation:restoreFolderScale];
 }
 
 static void Icon110InstallPreviewHook(Class delegateClass,
