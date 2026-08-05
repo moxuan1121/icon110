@@ -64,13 +64,7 @@ static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
         isTodayView = isTodayView || [ancestorClassName containsString:@"Today"];
     }
 
-    if (isTodayView) return NO;
-    if (isWidget) {
-        // Only widgets whose location is confirmed as the root Home Screen
-        // receive 110%. An unresolved widget stays at 100% until layout gives
-        // it a root location, preventing Today widgets from being enlarged.
-        return [location containsString:@"Root"];
-    }
+    if (isTodayView || isWidget) return NO;
     return YES;
 }
 
