@@ -3,6 +3,7 @@
 A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 
 - Fixed app/folder icon scale: 110%
+- Long-press layout refreshes remain at 110% without a 100% handoff frame
 - Widgets remain at the system scale
 - Application and folder labels are hidden
 - Home Screen and folder page dots are hidden, including their hit area

@@ -36,12 +36,16 @@ typedef void (^Icon110Completion)(void);
 }
 
 // Remove application and folder labels without a settings dependency.
-- (BOOL)allowsLabelArea {
-    return NO;
-}
-
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    // Long-press/editing mode rebuilds the icon image during layout and can
+    // briefly restore the inner container to 100%. Correct it in the same
+    // layout pass, before Core Animation presents that intermediate frame.
+    [self _icon110ApplyScale];
 }
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
