@@ -228,7 +228,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     UIView *container = self.contentContainerView;
     if (!container) return;
 
-    if (!Icon110ShouldScaleIconView(self)) {
+    // Folder icons already obtain 110% through iconContentScale. Applying a
+    // second sublayer scale makes context-menu highlighting compound to about
+    // 125%, then leaves UIKit alternating between the two scale states.
+    BOOL shouldUseSublayerScale = Icon110ShouldScaleIconView(self) && ![self isFolderIcon];
+    if (!shouldUseSublayerScale) {
         if (self.icon110ScaleApplied) {
             CATransform3D originalTransform = self.icon110OriginalSublayerTransform
                 ? [self.icon110OriginalSublayerTransform CATransform3DValue]
