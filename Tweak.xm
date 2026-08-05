@@ -10,13 +10,18 @@ typedef void (^Icon110Completion)(void);
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
+@property (nonatomic, assign) BOOL icon110ContextMenuDismissing;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
+- (void)_icon110BeginContextMenuDismissal;
+- (void)_icon110EndContextMenuDismissal;
 @end
 
 %hook SBIconView
+
+%property (nonatomic, assign) BOOL icon110ContextMenuDismissing;
 
 // Folder transitions consult iconContentScale for both the collapsed folder
 // icon and its expanded contents. Expanded icons report 110% only while an
@@ -25,6 +30,10 @@ typedef void (^Icon110Completion)(void);
 - (CGFloat)iconContentScale {
     if ([self.icon isKindOfClass:NSClassFromString(@"SBWidgetIcon")]) {
         return %orig;
+    }
+
+    if (self.icon110ContextMenuDismissing) {
+        return kIconScale;
     }
 
     BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
@@ -41,17 +50,8 @@ typedef void (^Icon110Completion)(void);
 }
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
-    // Long press rebuilds the inner image view with an explicit animation.
-    // That animation captures the system 100% state before our 110% layer
-    // scale is restored, so correcting layout afterwards is too late. Keep
-    // the outer SpringBoard interaction animation, but make this internal
-    // image refresh atomic at the already-established 110% scale.
+    %orig(animated);
     [self _icon110ApplyScale];
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    %orig(NO);
-    [self _icon110ApplyScale];
-    [CATransaction commit];
 }
 
 - (void)didMoveToSuperview {
@@ -83,6 +83,54 @@ typedef void (^Icon110Completion)(void);
     [CATransaction setDisableActions:YES];
     container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
+}
+
+%new
+- (void)_icon110BeginContextMenuDismissal {
+    if (self.icon110ContextMenuDismissing) return;
+
+    self.icon110ContextMenuDismissing = YES;
+    UIView *container = self.contentContainerView;
+    if (!container) return;
+
+    // During dismissal SpringBoard asks iconContentScale for the temporary
+    // context-menu snapshot. Let the system provide 110% and temporarily
+    // remove our separate 110% layer so the two scales do not compound.
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    container.layer.sublayerTransform = CATransform3DIdentity;
+    [CATransaction commit];
+}
+
+%new
+- (void)_icon110EndContextMenuDismissal {
+    if (!self.icon110ContextMenuDismissing) return;
+    self.icon110ContextMenuDismissing = NO;
+    [self _icon110ApplyScale];
+}
+
+%end
+
+%hook UIContextMenuInteraction
+
+- (void)dismissMenu {
+    UIView *candidate = self.view;
+    Class iconViewClass = NSClassFromString(@"SBIconView");
+    while (candidate && ![candidate isKindOfClass:iconViewClass]) {
+        candidate = candidate.superview;
+    }
+
+    SBIconView *iconView = (SBIconView *)candidate;
+    [iconView _icon110BeginContextMenuDismissal];
+    %orig;
+
+    if (iconView) {
+        __weak SBIconView *weakIconView = iconView;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [weakIconView _icon110EndContextMenuDismissal];
+        });
+    }
 }
 
 %end
