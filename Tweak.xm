@@ -408,6 +408,17 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
 
 %end
 
+%hook SBFolderIconImageView
+
+- (void)setBackgroundView:(id)backgroundView {
+    // SpringBoard renders the Home Screen folder plate through this assigned
+    // view on iOS 16. A blank view preserves the system's folder transition
+    // handoff without drawing the rounded material behind the miniature icons.
+    %orig([[UIView alloc] initWithFrame:CGRectZero]);
+}
+
+%end
+
 // The Home Screen folder thumbnail uses its own background view. Keep the
 // miniature icons visible while removing only their rounded material plate.
 %hook SBFolderIconBackgroundView
