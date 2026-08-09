@@ -3,7 +3,7 @@ name: Build Icon110 package
 on:
   workflow_dispatch:
   push:
-    branches: [master, main, mox1]
+    branches: [master, main, mox1, "feature/**"]
 
 jobs:
   build:

@@ -3,7 +3,7 @@ name: Build Icon110 RootHide package
 on:
   workflow_dispatch:
   push:
-    branches: [master, main, mox1]
+    branches: [master, main, mox1, "feature/**"]
 
 jobs:
   build-roothide:
