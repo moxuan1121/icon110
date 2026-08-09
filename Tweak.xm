@@ -408,6 +408,47 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
 
 %end
 
+// The Home Screen folder thumbnail uses its own background view. Keep the
+// miniature icons visible while removing only their rounded material plate.
+%hook SBFolderIconBackgroundView
+
+- (void)setAlpha:(CGFloat)alpha {
+    %orig(0.0);
+}
+
+- (void)setHidden:(BOOL)hidden {
+    %orig(YES);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    UIView *backgroundView = (UIView *)self;
+    backgroundView.hidden = YES;
+    backgroundView.alpha = 0.0;
+}
+
+%end
+
+// Compatibility with SpringBoardHome variants that use an SBH-prefixed class.
+%hook SBHFolderIconBackgroundView
+
+- (void)setAlpha:(CGFloat)alpha {
+    %orig(0.0);
+}
+
+- (void)setHidden:(BOOL)hidden {
+    %orig(YES);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    UIView *backgroundView = (UIView *)self;
+    backgroundView.hidden = YES;
+    backgroundView.alpha = 0.0;
+}
+
+%end
+
 %hook SBIconListPageControl
 
 - (void)setHidden:(BOOL)hidden {
