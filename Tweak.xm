@@ -3,7 +3,21 @@
 #import <math.h>
 
 static const CGFloat kIconScale = 1.10;
-static BOOL gIcon110FolderTransitionActive = NO;
+static NSUInteger gIcon110FolderTransitionDepth = 0;
+
+static BOOL Icon110FolderTransitionIsActive(void) {
+    return gIcon110FolderTransitionDepth > 0;
+}
+
+static void Icon110BeginFolderTransition(void) {
+    gIcon110FolderTransitionDepth++;
+}
+
+static void Icon110EndFolderTransition(void) {
+    if (gIcon110FolderTransitionDepth > 0) {
+        gIcon110FolderTransitionDepth--;
+    }
+}
 
 typedef void (^Icon110Completion)(void);
 typedef UITargetedPreview *(*Icon110PreviewIMP)(id, SEL, UIContextMenuInteraction *, UIContextMenuConfiguration *);
@@ -202,7 +216,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     BOOL isInsideFolder = [self.location containsString:@"SBIconLocationFolder"];
-    if (gIcon110FolderTransitionActive && ([self isFolderIcon] || isInsideFolder)) {
+    if (Icon110FolderTransitionIsActive() && ([self isFolderIcon] || isInsideFolder)) {
         return kIconScale;
     }
 
@@ -298,9 +312,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               location:(id)location
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
-    gIcon110FolderTransitionActive = YES;
+    Icon110BeginFolderTransition();
     Icon110Completion wrappedCompletion = ^{
-        gIcon110FolderTransitionActive = NO;
+        Icon110EndFolderTransition();
         if (completion) completion();
     };
     %orig(folderIcon, location, animated, wrappedCompletion);
@@ -308,9 +322,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)popFolderAnimated:(BOOL)animated
                completion:(Icon110Completion)completion {
-    gIcon110FolderTransitionActive = YES;
+    Icon110BeginFolderTransition();
     Icon110Completion wrappedCompletion = ^{
-        gIcon110FolderTransitionActive = NO;
+        Icon110EndFolderTransition();
         if (completion) completion();
     };
     %orig(animated, wrappedCompletion);
@@ -346,13 +360,26 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %end
 
+@interface SBFolderIconImageView : UIView
+@property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
+@end
+
 %hook SBFolderIconImageView
 
+%property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
+
 - (void)setBackgroundView:(id)backgroundView {
-    // SpringBoard renders the Home Screen folder plate through this assigned
-    // view on iOS 16. A blank view preserves the system's folder transition
-    // handoff without drawing the rounded material behind the miniature icons.
-    %orig([[UIView alloc] initWithFrame:CGRectZero]);
+    UIView *transparentView = self.icon110TransparentBackgroundView;
+    if (!transparentView) {
+        transparentView = [[UIView alloc] initWithFrame:CGRectZero];
+        transparentView.userInteractionEnabled = NO;
+        transparentView.backgroundColor = [UIColor clearColor];
+        self.icon110TransparentBackgroundView = transparentView;
+    }
+    // iOS 15 renders the Home Screen folder plate through this assigned view.
+    // Reusing one blank view preserves the system transition handoff without
+    // drawing the material behind the miniature icons.
+    %orig(transparentView);
 }
 
 %end
