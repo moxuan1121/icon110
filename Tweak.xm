@@ -381,8 +381,9 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
 
 - (void)layoutSubviews {
     %orig;
-    self.hidden = YES;
-    self.alpha = 0.0;
+    UIView *backgroundView = (UIView *)self;
+    backgroundView.hidden = YES;
+    backgroundView.alpha = 0.0;
 }
 
 %end
@@ -400,8 +401,9 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
 
 - (void)layoutSubviews {
     %orig;
-    self.hidden = YES;
-    self.alpha = 0.0;
+    UIView *backgroundView = (UIView *)self;
+    backgroundView.hidden = YES;
+    backgroundView.alpha = 0.0;
 }
 
 %end
