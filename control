@@ -1,8 +1,8 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.0.28
+Version: 1.1.0
 Architecture: iphoneos-arm
-Description: Fixed 110% icon scaling with smooth long-press and transition behavior, with labels and page dots removed.
+Description: 110% icons with smooth transitions, hidden labels and page dots, plus transparent Dock and folder backgrounds.
 Maintainer: moxuan1121
 Author: moxuan1121
 Section: Tweaks
