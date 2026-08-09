@@ -319,32 +319,8 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 %end
 
 @interface SBDockView : UIView
-- (UIView *)backgroundView;
+- (void)setBackgroundAlpha:(CGFloat)alpha;
 @end
-
-static void Icon110HideDockBackground(SBDockView *dockView) {
-    UIView *backgroundView = nil;
-    if ([dockView respondsToSelector:@selector(backgroundView)]) {
-        backgroundView = [dockView backgroundView];
-    }
-    if (backgroundView && backgroundView != dockView) {
-        backgroundView.hidden = YES;
-        backgroundView.alpha = 0.0;
-    }
-
-    // Fallback for SpringBoard versions that do not expose backgroundView.
-    // Only inspect the dock's immediate children so icon content is untouched.
-    for (UIView *subview in dockView.subviews) {
-        NSString *className = NSStringFromClass([subview class]);
-        if ([className containsString:@"DockBackground"] ||
-            [className containsString:@"WallpaperEffect"] ||
-            [className containsString:@"MaterialView"] ||
-            [className containsString:@"VisualEffectView"]) {
-            subview.hidden = YES;
-            subview.alpha = 0.0;
-        }
-    }
-}
 
 %hook SBDockView
 
@@ -352,52 +328,14 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
     %orig(0.0);
 }
 
-- (void)layoutSubviews {
-    %orig;
-    Icon110HideDockBackground(self);
-}
-
-- (void)didMoveToWindow {
-    %orig;
-    Icon110HideDockBackground(self);
-}
-
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     %orig(previousTraitCollection);
-    Icon110HideDockBackground(self);
+    [self setBackgroundAlpha:0.0];
 }
 
 %end
 
 %hook SBFolderBackgroundView
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(0.0);
-}
-
-- (void)setHidden:(BOOL)hidden {
-    %orig(YES);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    UIView *backgroundView = (UIView *)self;
-    backgroundView.hidden = YES;
-    backgroundView.alpha = 0.0;
-}
-
-%end
-
-// Some iOS 16 SpringBoard builds use the SBH-prefixed background class.
-%hook SBHFolderBackgroundView
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(0.0);
-}
-
-- (void)setHidden:(BOOL)hidden {
-    %orig(YES);
-}
 
 - (void)layoutSubviews {
     %orig;
@@ -415,47 +353,6 @@ static void Icon110HideDockBackground(SBDockView *dockView) {
     // view on iOS 16. A blank view preserves the system's folder transition
     // handoff without drawing the rounded material behind the miniature icons.
     %orig([[UIView alloc] initWithFrame:CGRectZero]);
-}
-
-%end
-
-// The Home Screen folder thumbnail uses its own background view. Keep the
-// miniature icons visible while removing only their rounded material plate.
-%hook SBFolderIconBackgroundView
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(0.0);
-}
-
-- (void)setHidden:(BOOL)hidden {
-    %orig(YES);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    UIView *backgroundView = (UIView *)self;
-    backgroundView.hidden = YES;
-    backgroundView.alpha = 0.0;
-}
-
-%end
-
-// Compatibility with SpringBoardHome variants that use an SBH-prefixed class.
-%hook SBHFolderIconBackgroundView
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(0.0);
-}
-
-- (void)setHidden:(BOOL)hidden {
-    %orig(YES);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    UIView *backgroundView = (UIView *)self;
-    backgroundView.hidden = YES;
-    backgroundView.alpha = 0.0;
 }
 
 %end

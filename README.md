@@ -7,6 +7,7 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - Transparent Dock background while preserving Dock icons
 - Transparent folder background while preserving folder icon animations
 - Transparent Home Screen folder thumbnail background while preserving its miniature icons
+- Transparency is limited to dedicated SpringBoard Dock and folder APIs
 - Widgets remain at the system scale
 - Application and folder labels are hidden
 - Home Screen and folder page dots are hidden, including their hit area
