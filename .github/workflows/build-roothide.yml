@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install build tools
-        run: brew install ldid make xz
+        run: brew install dpkg ldid make xz
 
       - name: Install RootHide Theos and SDK
         run: |
