@@ -1,5 +1,6 @@
+export THEOS_PACKAGE_SCHEME := roothide
 export ARCHS := arm64 arm64e
-export TARGET := iphone:clang:16.5:13.0
+export TARGET := iphone:clang:16.5:15.0
 
 INSTALL_TARGET_PROCESSES := SpringBoard
 

@@ -30,9 +30,48 @@ jobs:
       - name: Build RootHide package
         run: |
           export THEOS="$HOME/theos-roothide"
-          export THEOS_PACKAGE_SCHEME=roothide
           gmake clean
           gmake package FINALPACKAGE=1
+
+      - name: Audit RootHide package
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(packages/*.deb)
+          if [[ ${#packages[@]} -ne 1 ]]; then
+            echo "Expected exactly one DEB, found ${#packages[@]}" >&2
+            exit 1
+          fi
+
+          deb="${packages[0]}"
+          test "$(dpkg-deb -f "$deb" Package)" = "com.moxuan.icon110"
+          test "$(dpkg-deb -f "$deb" Architecture)" = "iphoneos-arm64e"
+
+          control_entries="$(dpkg-deb --ctrl-tarfile "$deb" | tar -tf - | sed 's#^\./##' | sed '/^$/d')"
+          unexpected_control="$(printf '%s\n' "$control_entries" | grep -Ev '^(control|\.)$' || true)"
+          if [[ -n "$unexpected_control" ]]; then
+            echo "Unexpected control archive entries:" >&2
+            printf '%s\n' "$unexpected_control" >&2
+            exit 1
+          fi
+
+          data_entries="$(dpkg-deb --fsys-tarfile "$deb" | tar -tf - | sed 's#^\./##' | sed '/^$/d')"
+          unexpected_data="$(printf '%s\n' "$data_entries" | grep -Ev '^($|\.|Library/?$|Library/MobileSubstrate/?$|Library/MobileSubstrate/DynamicLibraries/?$|Library/MobileSubstrate/DynamicLibraries/Icon110\.(dylib|plist))$' || true)"
+          if [[ -n "$unexpected_data" ]]; then
+            echo "Unexpected package payload entries:" >&2
+            printf '%s\n' "$unexpected_data" >&2
+            exit 1
+          fi
+
+          test "$(printf '%s\n' "$data_entries" | grep -c '^Library/MobileSubstrate/DynamicLibraries/Icon110\.dylib$')" -eq 1
+          test "$(printf '%s\n' "$data_entries" | grep -c '^Library/MobileSubstrate/DynamicLibraries/Icon110\.plist$')" -eq 1
+          if dpkg-deb --fsys-tarfile "$deb" | tar -tvf - | grep -E '^l'; then
+            echo "Symbolic links are not allowed in this package" >&2
+            exit 1
+          fi
+
+          sha256sum "$deb"
 
       - name: Upload RootHide package
         uses: actions/upload-artifact@v4

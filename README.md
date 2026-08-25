@@ -21,12 +21,14 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
   contents only during folder transitions. App-to-folder returns retain one
   scale layer, avoiding the compounded 121% animation
 
-Build with Theos:
+Build the Dopamine RootHide-only package with Theos:
 
 ```sh
-make package FINALPACKAGE=1
+gmake clean
+gmake package FINALPACKAGE=1
 ```
 
-The included `build-roothide.yml` workflow uses the official RootHide Theos
-fork and builds with `THEOS_PACKAGE_SCHEME=roothide`. Its package is uploaded
-as the `Icon110-RootHide` artifact.
+The RootHide package scheme and iOS 15 minimum deployment target are enforced
+by the Makefile. The included `build-roothide.yml` workflow uses the official
+RootHide Theos fork, validates the final DEB contents and metadata, and uploads
+it as the `Icon110-RootHide` artifact.
