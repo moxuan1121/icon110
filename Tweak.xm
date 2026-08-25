@@ -345,6 +345,20 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     %orig(previousTraitCollection);
     [self setBackgroundAlpha:0.0];
+
+    // During a light/dark appearance change SpringBoard rebuilds the Dock
+    // material after this callback returns. Reapply once after that deferred
+    // update so the background stays transparent without waiting for the next
+    // touch-driven layout pass.
+    __weak SBDockView *weakDockView = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(0.1 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        SBDockView *dockView = weakDockView;
+        if (dockView.window) {
+            [dockView setBackgroundAlpha:0.0];
+        }
+    });
 }
 
 %end
