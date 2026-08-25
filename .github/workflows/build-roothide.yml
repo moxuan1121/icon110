@@ -71,7 +71,7 @@ jobs:
             exit 1
           fi
 
-          sha256sum "$deb"
+          shasum -a 256 "$deb"
 
       - name: Upload RootHide package
         uses: actions/upload-artifact@v4
