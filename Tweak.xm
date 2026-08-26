@@ -43,6 +43,9 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
+- (BOOL)shouldShowLabelAccessoryView;
+- (BOOL)allowsLabelAccessoryView;
+- (void)_updateLabelAccessoryView;
 - (void)_updateIconImageViewAnimated:(BOOL)animated;
 - (void)_icon110ApplyScale;
 - (void)_icon110HideLabel;
@@ -53,7 +56,9 @@ static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
     for (UIView *subview in view.subviews) {
         NSString *className = NSStringFromClass([subview class]);
         if ([className containsString:@"IconLabel"] ||
-            [className containsString:@"LabelView"]) {
+            [className containsString:@"LabelView"] ||
+            [className containsString:@"LabelAccessory"] ||
+            [className containsString:@"RecentlyUpdated"]) {
             subview.hidden = YES;
             subview.alpha = 0.0;
         } else {
@@ -225,6 +230,19 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)setAllowsLabelArea:(BOOL)allowsLabelArea {
     %orig(NO);
+    [self _icon110HideLabel];
+}
+
+- (BOOL)shouldShowLabelAccessoryView {
+    return NO;
+}
+
+- (BOOL)allowsLabelAccessoryView {
+    return NO;
+}
+
+- (void)_updateLabelAccessoryView {
+    %orig;
     [self _icon110HideLabel];
 }
 

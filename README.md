@@ -9,7 +9,7 @@ A minimal SpringBoard tweak based on Atria's icon-layer scaling approach.
 - Transparent Home Screen folder thumbnail background while preserving its miniature icons
 - Transparency is limited to dedicated SpringBoard Dock and folder APIs
 - Widgets remain at the system scale
-- Application and folder labels are hidden
+- Application and folder labels are hidden, including recently-updated dots
 - Home Screen and folder page dots are hidden, including their hit area
 - No settings bundle
 - No PreferenceLoader, Alderis, or other third-party tweak libraries
