@@ -1,6 +1,6 @@
 Package: com.moxuan.icon110
 Name: Icon 110%
-Version: 1.3.2
+Version: 1.3.3
 Architecture: iphoneos-arm
 Depends: firmware (>= 15.0)
 Description: 110% icons with smooth transitions, hidden labels and page dots, plus transparent Dock and folder backgrounds.
