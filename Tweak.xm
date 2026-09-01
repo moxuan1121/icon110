@@ -10,6 +10,29 @@ static BOOL gShadowFolderClosing = NO;
 static BOOL gShadowFolderClosingRevealed = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
+static NSString *const kIcon110DragLogPath = @"/var/mobile/Library/Preferences/com.moxuan.icon110.drag.log";
+
+static void Icon110DragLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+static void Icon110DragLog(NSString *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
+    va_end(arguments);
+    NSString *line = [NSString stringWithFormat:@"%.6f %@\n",
+                      [NSDate date].timeIntervalSince1970, message];
+    @synchronized([NSFileHandle class]) {
+        NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110DragLogPath];
+        if (!handle) {
+            [[NSFileManager defaultManager] createFileAtPath:kIcon110DragLogPath
+                                                     contents:nil
+                                                   attributes:nil];
+            handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110DragLogPath];
+        }
+        [handle seekToEndOfFile];
+        [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+        [handle closeFile];
+    }
+}
 
 static BOOL Icon110FolderTransitionIsActive(void) {
     return gIcon110FolderTransitionDepth > 0;
@@ -46,6 +69,8 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
 @property (nonatomic, readonly) CGFloat effectiveIconImageAlpha;
+@property (nonatomic, readonly, getter=isDragging) BOOL dragging;
+@property (nonatomic, readonly, getter=isEditing) BOOL editing;
 @property (nonatomic, assign) BOOL icon110ScaleApplied;
 @property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 @property (nonatomic, strong) UIImageView *icon110ShadowView;
@@ -58,7 +83,34 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110HideLabel;
 - (void)_icon110SetUpShadow;
 - (void)_icon110UpdateShadowLayout;
+- (void)setDragging:(BOOL)dragging;
+- (void)setDragging:(BOOL)dragging updateImmediately:(BOOL)immediately;
+- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session;
+- (void)dragInteraction:(id)interaction sessionWillBegin:(id)session;
+- (id)dragInteraction:(id)interaction previewForLiftingItem:(id)item session:(id)session;
+- (id)dragPreviewForItem:(id)item session:(id)session;
+- (SBIconView *)matchingIconViewWithConfigurationOptions:(NSUInteger)options;
+- (UIView *)iconImageSnapshotView;
+- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation;
 @end
+
+static void Icon110LogIconView(NSString *event, SBIconView *iconView) {
+    Icon110DragLog(@"%@ view=%p class=%@ icon=%p iconClass=%@ location=%@ editing=%d dragging=%d window=%p frame=%@ container=%p shadow=%p shadowSuper=%p shadowAlpha=%.3f",
+                   event,
+                   iconView,
+                   NSStringFromClass(iconView.class),
+                   iconView.icon,
+                   NSStringFromClass([iconView.icon class]),
+                   iconView.location,
+                   iconView.isEditing,
+                   iconView.isDragging,
+                   iconView.window,
+                   NSStringFromCGRect(iconView.frame),
+                   iconView.contentContainerView,
+                   iconView.icon110ShadowView,
+                   iconView.icon110ShadowView.superview,
+                   iconView.icon110ShadowView.alpha);
+}
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
     static Class widgetIconClass;
@@ -306,6 +358,69 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     %orig(alpha);
     [self _icon110UpdateShadowLayout];
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
+}
+
+- (void)setDragging:(BOOL)dragging {
+    Icon110LogIconView([NSString stringWithFormat:@"setDragging:%d BEFORE", dragging], self);
+    %orig(dragging);
+    Icon110LogIconView([NSString stringWithFormat:@"setDragging:%d AFTER", dragging], self);
+}
+
+- (void)setDragging:(BOOL)dragging updateImmediately:(BOOL)immediately {
+    Icon110LogIconView([NSString stringWithFormat:@"setDragging:%d immediate:%d BEFORE", dragging, immediately], self);
+    %orig(dragging, immediately);
+    Icon110LogIconView([NSString stringWithFormat:@"setDragging:%d immediate:%d AFTER", dragging, immediately], self);
+}
+
+- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session {
+    Icon110LogIconView(@"itemsForBeginning BEFORE", self);
+    NSArray *items = %orig(interaction, session);
+    Icon110LogIconView([NSString stringWithFormat:@"itemsForBeginning AFTER count=%lu", (unsigned long)items.count], self);
+    return items;
+}
+
+- (void)dragInteraction:(id)interaction sessionWillBegin:(id)session {
+    Icon110LogIconView(@"sessionWillBegin BEFORE", self);
+    %orig(interaction, session);
+    Icon110LogIconView(@"sessionWillBegin AFTER", self);
+}
+
+- (id)dragInteraction:(id)interaction previewForLiftingItem:(id)item session:(id)session {
+    Icon110LogIconView(@"previewForLifting BEFORE", self);
+    id preview = %orig(interaction, item, session);
+    Icon110DragLog(@"previewForLifting AFTER source=%p preview=%p previewClass=%@", self, preview, NSStringFromClass([preview class]));
+    return preview;
+}
+
+- (id)dragPreviewForItem:(id)item session:(id)session {
+    Icon110LogIconView(@"dragPreviewForItem BEFORE", self);
+    id preview = %orig(item, session);
+    Icon110DragLog(@"dragPreviewForItem AFTER source=%p preview=%p previewClass=%@", self, preview, NSStringFromClass([preview class]));
+    return preview;
+}
+
+- (SBIconView *)matchingIconViewWithConfigurationOptions:(NSUInteger)options {
+    Icon110LogIconView([NSString stringWithFormat:@"matchingIcon BEFORE options=%lu", (unsigned long)options], self);
+    SBIconView *matchingView = %orig(options);
+    Icon110LogIconView(@"matchingIcon AFTER source", self);
+    Icon110LogIconView(@"matchingIcon AFTER result", matchingView);
+    return matchingView;
+}
+
+- (UIView *)iconImageSnapshotView {
+    if (self.isEditing || self.isDragging) Icon110LogIconView(@"iconImageSnapshot BEFORE", self);
+    UIView *snapshot = %orig;
+    if (self.isEditing || self.isDragging) {
+        Icon110DragLog(@"iconImageSnapshot AFTER source=%p snapshot=%p snapshotClass=%@ frame=%@",
+                       self, snapshot, NSStringFromClass(snapshot.class), NSStringFromCGRect(snapshot.frame));
+    }
+    return snapshot;
+}
+
+- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation {
+    Icon110LogIconView([NSString stringWithFormat:@"sessionDidEnd operation=%lu BEFORE", (unsigned long)operation], self);
+    %orig(interaction, session, operation);
+    Icon110LogIconView(@"sessionDidEnd AFTER", self);
 }
 
 %new
@@ -556,4 +671,8 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %ctor {
     gShadowIconViews = [NSHashTable weakObjectsHashTable];
+    [@"Icon110 drag diagnostic start\n" writeToFile:kIcon110DragLogPath
+                                         atomically:YES
+                                           encoding:NSUTF8StringEncoding
+                                              error:nil];
 }

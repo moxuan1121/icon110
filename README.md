@@ -44,3 +44,15 @@ by the Makefile. The included `build-roothide.yml` workflow builds the isolated
 `icon` integration branch with the official RootHide Theos fork, validates the
 final DEB contents and metadata, and uploads it as the `Icon110-RootHide`
 artifact.
+
+## Drag diagnostic build
+
+Version `1.4.1~diagnostic1` records the iOS 15 SpringBoard drag callback order
+without changing shadow visibility or layout. After one drag and drop, collect:
+
+```text
+/var/mobile/Library/Preferences/com.moxuan.icon110.drag.log
+```
+
+The log is reset whenever SpringBoard starts. This diagnostic is temporary and
+will be removed once the actual moving-view path is confirmed.
