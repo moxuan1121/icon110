@@ -10,6 +10,7 @@ TWEAK_NAME := Icon110
 Icon110_FILES := Tweak.xm
 Icon110_CFLAGS := -fobjc-arc
 Icon110_FRAMEWORKS := UIKit QuartzCore
+Icon110_LIBRARIES := roothide
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 

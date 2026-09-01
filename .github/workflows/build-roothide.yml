@@ -3,7 +3,7 @@ name: Build Icon110 RootHide package
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, icon]
 
 jobs:
   build-roothide:
@@ -57,7 +57,7 @@ jobs:
           fi
 
           data_entries="$(dpkg-deb --fsys-tarfile "$deb" | tar -tf - | sed 's#^\./##' | sed '/^$/d')"
-          unexpected_data="$(printf '%s\n' "$data_entries" | grep -Ev '^($|\.|Library/?$|Library/MobileSubstrate/?$|Library/MobileSubstrate/DynamicLibraries/?$|Library/MobileSubstrate/DynamicLibraries/Icon110\.(dylib|plist))$' || true)"
+          unexpected_data="$(printf '%s\n' "$data_entries" | grep -Ev '^($|\.|Library/?$|Library/MobileSubstrate/?$|Library/MobileSubstrate/DynamicLibraries/?$|Library/MobileSubstrate/DynamicLibraries/Icon110\.(dylib|plist)|Library/Themes/?$|Library/Themes/iconShadow@3x\.png)$' || true)"
           if [[ -n "$unexpected_data" ]]; then
             echo "Unexpected package payload entries:" >&2
             printf '%s\n' "$unexpected_data" >&2
@@ -66,6 +66,7 @@ jobs:
 
           test "$(printf '%s\n' "$data_entries" | grep -c '^Library/MobileSubstrate/DynamicLibraries/Icon110\.dylib$')" -eq 1
           test "$(printf '%s\n' "$data_entries" | grep -c '^Library/MobileSubstrate/DynamicLibraries/Icon110\.plist$')" -eq 1
+          test "$(printf '%s\n' "$data_entries" | grep -c '^Library/Themes/iconShadow@3x\.png$')" -eq 1
           if dpkg-deb --fsys-tarfile "$deb" | tar -tvf - | grep -E '^l'; then
             echo "Symbolic links are not allowed in this package" >&2
             exit 1
