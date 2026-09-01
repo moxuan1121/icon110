@@ -317,10 +317,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session {
     self.icon110DragActive = YES;
-    self.icon110ShadowView.alpha = 0.0;
+    [self.icon110ShadowView removeFromSuperview];
     NSArray *items = %orig(interaction, session);
     if (items.count == 0) {
         self.icon110DragActive = NO;
+        [self _icon110UpdateShadowLayout];
         self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
     }
     return items;
@@ -328,13 +329,18 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (id)dragPreviewForItem:(id)item session:(id)session {
     UITargetedDragPreview *preview = %orig(item, session);
-    preview.parameters.shadowPath = [UIBezierPath bezierPath];
-    return preview;
+    if (!preview) return nil;
+    UIPreviewParameters *parameters = preview.parameters;
+    parameters.shadowPath = [UIBezierPath bezierPath];
+    return [[UITargetedDragPreview alloc] initWithView:preview.view
+                                           parameters:parameters
+                                               target:preview.target];
 }
 
 - (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation {
     %orig(interaction, session, operation);
     self.icon110DragActive = NO;
+    [self _icon110UpdateShadowLayout];
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
 }
 
@@ -400,6 +406,10 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     UIView *container = self.contentContainerView;
     if (!shadowView) return;
     if (Icon110ShadowUnsupportedIcon(self.icon)) {
+        [shadowView removeFromSuperview];
+        return;
+    }
+    if (self.icon110DragActive || self.isDragging) {
         [shadowView removeFromSuperview];
         return;
     }
