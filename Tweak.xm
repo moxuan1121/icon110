@@ -369,17 +369,15 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     CATransform3D transform = container.layer.sublayerTransform;
-    if (fabs(transform.m11 - kIconScale) < 0.001 &&
-        fabs(transform.m22 - kIconScale) < 0.001) {
-        return;
-    }
+    CATransform3D desiredTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+    if (CATransform3DEqualToTransform(transform, desiredTransform)) return;
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (!self.icon110ScaleApplied) {
         self.icon110OriginalSublayerTransform = [NSValue valueWithCATransform3D:transform];
     }
-    container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
+    container.layer.sublayerTransform = desiredTransform;
     [CATransaction commit];
     self.icon110ScaleApplied = YES;
 }
