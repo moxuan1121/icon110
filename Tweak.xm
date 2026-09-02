@@ -44,13 +44,9 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) id icon;
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
-@property (nonatomic, readonly) CGFloat effectiveIconImageAlpha;
-@property (nonatomic, readonly, getter=isDragging) BOOL dragging;
-@property (nonatomic, readonly, getter=isEditing) BOOL editing;
 @property (nonatomic, assign) BOOL icon110ScaleApplied;
 @property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
-@property (nonatomic, strong) UIImageView *icon110ShadowView;
-@property (nonatomic, assign) BOOL icon110DragActive;
+@property (nonatomic, strong) CALayer *icon110ShadowLayer;
 - (id)initWithConfigurationOptions:(id)options listLayoutProvider:(id)provider;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
@@ -60,9 +56,6 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110HideLabel;
 - (void)_icon110SetUpShadow;
 - (void)_icon110UpdateShadowLayout;
-- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session;
-- (id)dragPreviewForItem:(id)item session:(id)session;
-- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation;
 @end
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
@@ -74,8 +67,7 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
         [icon isKindOfClass:libraryCategoryIconClass];
 }
 
-static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
-    if (iconView.icon110DragActive || iconView.isDragging) return 0.0;
+static float Icon110ShadowOpacity(SBIconView *iconView) {
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
@@ -85,14 +77,12 @@ static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
         (gShadowFolderPresented && !isInsideFolder)) {
         return 0.0;
     }
-    return iconAlpha;
+    return 1.0;
 }
 
 static void Icon110UpdateAllShadows(void) {
     for (SBIconView *iconView in gShadowIconViews.allObjects) {
         [iconView _icon110UpdateShadowLayout];
-        iconView.icon110ShadowView.alpha =
-            Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
     }
 }
 
@@ -203,13 +193,6 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
                                                       SEL selector,
                                                       UIContextMenuInteraction *interaction,
                                                       UIContextMenuConfiguration *configuration) {
-    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
-    if (iconView.icon110DragActive) {
-        iconView.icon110DragActive = NO;
-        [iconView _icon110UpdateShadowLayout];
-        iconView.icon110ShadowView.alpha =
-            Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
-    }
     Icon110PrepareContextMenuHookStorage();
     Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
         delegate, gIcon110OriginalDismissPreviewIMPs);
@@ -264,8 +247,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %property (nonatomic, assign) BOOL icon110ScaleApplied;
 %property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
-%property (nonatomic, strong) UIImageView *icon110ShadowView;
-%property (nonatomic, assign) BOOL icon110DragActive;
+%property (nonatomic, strong) CALayer *icon110ShadowLayer;
 
 - (id)initWithConfigurationOptions:(id)options listLayoutProvider:(id)provider {
     id result = %orig;
@@ -316,41 +298,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     [self _icon110UpdateShadowLayout];
 }
 
-- (void)_applyIconImageAlpha:(CGFloat)alpha {
-    %orig(alpha);
-    [self _icon110UpdateShadowLayout];
-    self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
-}
-
-- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session {
-    self.icon110DragActive = YES;
-    [self.icon110ShadowView removeFromSuperview];
-    NSArray *items = %orig(interaction, session);
-    if (items.count == 0) {
-        self.icon110DragActive = NO;
-        [self _icon110UpdateShadowLayout];
-        self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
-    }
-    return items;
-}
-
-- (id)dragPreviewForItem:(id)item session:(id)session {
-    UITargetedDragPreview *preview = %orig(item, session);
-    if (!preview) return nil;
-    UIPreviewParameters *parameters = preview.parameters;
-    parameters.shadowPath = [UIBezierPath bezierPath];
-    return [[UITargetedDragPreview alloc] initWithView:preview.view
-                                           parameters:parameters
-                                               target:preview.target];
-}
-
-- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation {
-    %orig(interaction, session, operation);
-    self.icon110DragActive = NO;
-    [self _icon110UpdateShadowLayout];
-    self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
-}
-
 %new
 - (void)_icon110ApplyScale {
     UIView *container = self.contentContainerView;
@@ -376,15 +323,17 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     CATransform3D transform = container.layer.sublayerTransform;
-    CATransform3D desiredTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
-    if (CATransform3DEqualToTransform(transform, desiredTransform)) return;
+    if (fabs(transform.m11 - kIconScale) < 0.001 &&
+        fabs(transform.m22 - kIconScale) < 0.001) {
+        return;
+    }
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (!self.icon110ScaleApplied) {
         self.icon110OriginalSublayerTransform = [NSValue valueWithCATransform3D:transform];
     }
-    container.layer.sublayerTransform = desiredTransform;
+    container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
     self.icon110ScaleApplied = YES;
 }
@@ -397,42 +346,31 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 %new
 - (void)_icon110SetUpShadow {
     UIImage *image = [UIImage imageWithContentsOfFile:jbroot(@"/Library/Themes/iconShadow@3x.png")];
-    UIImageView *shadowView = [[UIImageView alloc] initWithImage:image];
-    shadowView.userInteractionEnabled = NO;
-    shadowView.alpha = Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
-    self.icon110ShadowView = shadowView;
+    CALayer *shadowLayer = [CALayer layer];
+    self.icon110ShadowLayer = shadowLayer;
+    shadowLayer.frame = CGRectMake(0.0, 0.0, image.size.width, image.size.height);
+    shadowLayer.position = CGPointMake(CGRectGetMidX(self.layer.bounds),
+                                       CGRectGetMidY(self.layer.bounds));
+    shadowLayer.contents = (__bridge id)image.CGImage;
+    shadowLayer.opacity = Icon110ShadowOpacity(self);
+    [self.layer insertSublayer:shadowLayer atIndex:0];
     [gShadowIconViews addObject:self];
-    [self _icon110UpdateShadowLayout];
 }
 
 %new
 - (void)_icon110UpdateShadowLayout {
-    UIImageView *shadowView = self.icon110ShadowView;
-    UIView *container = self.contentContainerView;
-    if (!shadowView) return;
+    CALayer *shadowLayer = self.icon110ShadowLayer;
+    if (!shadowLayer) return;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [shadowLayer removeFromSuperlayer];
     if (Icon110ShadowUnsupportedIcon(self.icon)) {
-        [shadowView removeFromSuperview];
+        [CATransaction commit];
         return;
     }
-    if (self.icon110DragActive || self.isDragging) {
-        [shadowView removeFromSuperview];
-        return;
-    }
-    if (!container) return;
-
-    [UIView performWithoutAnimation:^{
-        CATransform3D inheritedTransform = container.layer.sublayerTransform;
-        CGFloat scaleX = fabs(inheritedTransform.m11);
-        CGFloat scaleY = fabs(inheritedTransform.m22);
-        shadowView.transform = CGAffineTransformMakeScale(
-            scaleX > 0.0 ? 1.0 / scaleX : 1.0,
-            scaleY > 0.0 ? 1.0 / scaleY : 1.0);
-        shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
-                                        CGRectGetMidY(container.bounds));
-        if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
-            [container insertSubview:shadowView atIndex:0];
-        }
-    }];
+    shadowLayer.opacity = Icon110ShadowOpacity(self);
+    [self.layer insertSublayer:shadowLayer atIndex:0];
+    [CATransaction commit];
 }
 
 %end
