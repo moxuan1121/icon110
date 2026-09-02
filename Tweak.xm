@@ -70,9 +70,6 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
-    if ([iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
-        return 0.0;
-    }
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
@@ -378,23 +375,19 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
     if (!container) return;
 
-    CATransform3D inheritedTransform = container.layer.sublayerTransform;
-    CGFloat scaleX = fabs(inheritedTransform.m11);
-    CGFloat scaleY = fabs(inheritedTransform.m22);
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    [shadowView.layer removeAnimationForKey:@"transform"];
-    [shadowView.layer setAffineTransform:CGAffineTransformMakeScale(
-        scaleX > 0.0 ? 1.0 / scaleX : 1.0,
-        scaleY > 0.0 ? 1.0 / scaleY : 1.0)];
     [UIView performWithoutAnimation:^{
+        CATransform3D inheritedTransform = container.layer.sublayerTransform;
+        CGFloat scaleX = fabs(inheritedTransform.m11);
+        CGFloat scaleY = fabs(inheritedTransform.m22);
+        shadowView.transform = CGAffineTransformMakeScale(
+            scaleX > 0.0 ? 1.0 / scaleX : 1.0,
+            scaleY > 0.0 ? 1.0 / scaleY : 1.0);
         shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
                                         CGRectGetMidY(container.bounds));
         if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
             [container insertSubview:shadowView atIndex:0];
         }
     }];
-    [CATransaction commit];
 }
 
 %end
