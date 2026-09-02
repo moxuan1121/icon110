@@ -433,7 +433,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
         Icon110EndFolderTransition();
         if (completion) completion();
     };
+    for (SBIconView *iconView in gShadowIconViews.allObjects) {
+        if ([iconView isFolderIcon]) iconView.icon110ShadowView.alpha = 0.0;
+    }
     %orig(folderIcon, location, animated, wrappedCompletion);
+    Icon110UpdateAllShadows();
 }
 
 - (void)popFolderAnimated:(BOOL)animated
