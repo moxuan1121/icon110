@@ -203,6 +203,13 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
                                                       SEL selector,
                                                       UIContextMenuInteraction *interaction,
                                                       UIContextMenuConfiguration *configuration) {
+    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
+    if (iconView.icon110DragActive) {
+        iconView.icon110DragActive = NO;
+        [iconView _icon110UpdateShadowLayout];
+        iconView.icon110ShadowView.alpha =
+            Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
+    }
     Icon110PrepareContextMenuHookStorage();
     Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
         delegate, gIcon110OriginalDismissPreviewIMPs);
