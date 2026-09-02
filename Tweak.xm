@@ -8,9 +8,9 @@ static NSUInteger gIcon110FolderTransitionDepth = 0;
 static BOOL gShadowFolderPresented = NO;
 static BOOL gShadowFolderClosing = NO;
 static BOOL gShadowFolderClosingRevealed = NO;
-static BOOL gShadowDragging = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
+
 static BOOL Icon110FolderTransitionIsActive(void) {
     return gIcon110FolderTransitionDepth > 0;
 }
@@ -46,12 +46,9 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
 @property (nonatomic, readonly) CGFloat effectiveIconImageAlpha;
-@property (nonatomic, readonly, getter=isDragging) BOOL dragging;
-@property (nonatomic, readonly, getter=isEditing) BOOL editing;
 @property (nonatomic, assign) BOOL icon110ScaleApplied;
 @property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 @property (nonatomic, strong) UIImageView *icon110ShadowView;
-@property (nonatomic, assign) BOOL icon110DragActive;
 - (id)initWithConfigurationOptions:(id)options listLayoutProvider:(id)provider;
 - (BOOL)isFolderIcon;
 - (CGFloat)iconContentScale;
@@ -61,9 +58,6 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110HideLabel;
 - (void)_icon110SetUpShadow;
 - (void)_icon110UpdateShadowLayout;
-- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session;
-- (id)dragPreviewForItem:(id)item session:(id)session;
-- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation;
 @end
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
@@ -76,7 +70,6 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
-    if (gShadowDragging || iconView.icon110DragActive || iconView.isDragging) return 0.0;
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
@@ -95,11 +88,6 @@ static void Icon110UpdateAllShadows(void) {
         iconView.icon110ShadowView.alpha =
             Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
     }
-}
-
-static void Icon110SetAllShadowsHiddenForDrag(BOOL hidden) {
-    gShadowDragging = hidden;
-    Icon110UpdateAllShadows();
 }
 
 static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
@@ -196,9 +184,6 @@ static UITargetedPreview *Icon110PreviewForHighlighting(id delegate,
                                                          SEL selector,
                                                          UIContextMenuInteraction *interaction,
                                                          UIContextMenuConfiguration *configuration) {
-    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
-    iconView.icon110DragActive = NO;
-    Icon110SetAllShadowsHiddenForDrag(NO);
     Icon110PrepareContextMenuHookStorage();
     Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
         delegate, gIcon110OriginalHighlightPreviewIMPs);
@@ -212,9 +197,6 @@ static UITargetedPreview *Icon110PreviewForDismissal(id delegate,
                                                       SEL selector,
                                                       UIContextMenuInteraction *interaction,
                                                       UIContextMenuConfiguration *configuration) {
-    SBIconView *iconView = Icon110IconViewForInteraction(interaction);
-    iconView.icon110DragActive = NO;
-    Icon110SetAllShadowsHiddenForDrag(NO);
     Icon110PrepareContextMenuHookStorage();
     Icon110PreviewIMP original = Icon110OriginalPreviewIMPForDelegate(
         delegate, gIcon110OriginalDismissPreviewIMPs);
@@ -270,7 +252,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 %property (nonatomic, assign) BOOL icon110ScaleApplied;
 %property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 %property (nonatomic, strong) UIImageView *icon110ShadowView;
-%property (nonatomic, assign) BOOL icon110DragActive;
 
 - (id)initWithConfigurationOptions:(id)options listLayoutProvider:(id)provider {
     id result = %orig;
@@ -327,33 +308,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
 }
 
-- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session {
-    self.icon110DragActive = YES;
-    Icon110SetAllShadowsHiddenForDrag(YES);
-    NSArray *items = %orig(interaction, session);
-    if (items.count == 0) {
-        self.icon110DragActive = NO;
-        Icon110SetAllShadowsHiddenForDrag(NO);
-    }
-    return items;
-}
-
-- (id)dragPreviewForItem:(id)item session:(id)session {
-    UITargetedDragPreview *preview = %orig(item, session);
-    if (!preview) return nil;
-    UIPreviewParameters *parameters = preview.parameters;
-    parameters.shadowPath = [UIBezierPath bezierPath];
-    return [[UITargetedDragPreview alloc] initWithView:preview.view
-                                           parameters:parameters
-                                               target:preview.target];
-}
-
-- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation {
-    %orig(interaction, session, operation);
-    self.icon110DragActive = NO;
-    Icon110SetAllShadowsHiddenForDrag(NO);
-}
-
 %new
 - (void)_icon110ApplyScale {
     UIView *container = self.contentContainerView;
@@ -379,15 +333,17 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
 
     CATransform3D transform = container.layer.sublayerTransform;
-    CATransform3D desiredTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
-    if (CATransform3DEqualToTransform(transform, desiredTransform)) return;
+    if (fabs(transform.m11 - kIconScale) < 0.001 &&
+        fabs(transform.m22 - kIconScale) < 0.001) {
+        return;
+    }
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (!self.icon110ScaleApplied) {
         self.icon110OriginalSublayerTransform = [NSValue valueWithCATransform3D:transform];
     }
-    container.layer.sublayerTransform = desiredTransform;
+    container.layer.sublayerTransform = CATransform3DMakeScale(kIconScale, kIconScale, 1.0);
     [CATransaction commit];
     self.icon110ScaleApplied = YES;
 }
@@ -414,10 +370,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     UIView *container = self.contentContainerView;
     if (!shadowView) return;
     if (Icon110ShadowUnsupportedIcon(self.icon)) {
-        [shadowView removeFromSuperview];
-        return;
-    }
-    if (self.icon110DragActive || self.isDragging) {
         [shadowView removeFromSuperview];
         return;
     }
@@ -461,7 +413,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
     Icon110BeginFolderTransition();
-    NSUInteger generation = ++gShadowFolderTransitionGeneration;
+    ++gShadowFolderTransitionGeneration;
     gShadowFolderClosing = NO;
     gShadowFolderClosingRevealed = NO;
     gShadowFolderPresented = YES;
@@ -469,12 +421,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
         if (completion) completion();
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (generation == gShadowFolderTransitionGeneration &&
-                gShadowFolderPresented && !gShadowFolderClosing) {
-                Icon110UpdateAllShadows();
-            }
-        });
     };
     %orig(folderIcon, location, animated, wrappedCompletion);
 }
