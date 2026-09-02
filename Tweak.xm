@@ -10,29 +10,6 @@ static BOOL gShadowFolderClosing = NO;
 static BOOL gShadowFolderClosingRevealed = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
-static NSString *const kIcon110FolderLogPath = @"/var/mobile/Library/Preferences/com.moxuan.icon110.folder.log";
-
-static void Icon110FolderLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
-static void Icon110FolderLog(NSString *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
-    va_end(arguments);
-    NSString *line = [message stringByAppendingString:@"\n"];
-    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110FolderLogPath];
-    if (!handle) {
-        [[NSFileManager defaultManager] createFileAtPath:kIcon110FolderLogPath contents:nil attributes:nil];
-        handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110FolderLogPath];
-    }
-    [handle seekToEndOfFile];
-    [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
-    [handle closeFile];
-}
-
-static id Icon110ObjectIvar(id object, const char *name) {
-    Ivar ivar = object ? class_getInstanceVariable([object class], name) : NULL;
-    return ivar ? object_getIvar(object, ivar) : nil;
-}
 
 static BOOL Icon110FolderTransitionIsActive(void) {
     return gIcon110FolderTransitionDepth > 0;
@@ -93,6 +70,9 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
+    if ([iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
+        return 0.0;
+    }
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
@@ -111,43 +91,6 @@ static void Icon110UpdateAllShadows(void) {
         iconView.icon110ShadowView.alpha =
             Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
     }
-}
-
-static void Icon110LogFolderState(NSString *event, id folderController) {
-    id folderIconView = Icon110ObjectIvar(folderController, "_folderIconView");
-    id animator = Icon110ObjectIvar(folderController, "_iconAnimator");
-    id animationContainer = Icon110ObjectIvar(animator, "_animationContainer");
-    NSMutableString *dump = [NSMutableString stringWithFormat:
-        @"%@ controller=%p folderIconView=%p(%@) animator=%p container=%p(%@)",
-        event, folderController, folderIconView,
-        NSStringFromClass([folderIconView class]), animator,
-        animationContainer, NSStringFromClass([animationContainer class])];
-    for (SBIconView *iconView in gShadowIconViews.allObjects) {
-        BOOL folderIcon = [iconView isFolderIcon];
-        BOOL insideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
-        if (!folderIcon && !insideFolder) continue;
-        CALayer *containerLayer = iconView.contentContainerView.layer;
-        CALayer *shadowLayer = iconView.icon110ShadowView.layer;
-        CALayer *presentedContainer = containerLayer.presentationLayer;
-        CALayer *presentedShadow = shadowLayer.presentationLayer;
-        CATransform3D containerPresentation = presentedContainer
-            ? presentedContainer.transform : CATransform3DIdentity;
-        CATransform3D shadowPresentation = presentedShadow
-            ? presentedShadow.transform : CATransform3DIdentity;
-        [dump appendFormat:@"\n  view=%p folder=%d inside=%d location=%@ window=%p super=%@ container=%p shadow=%p shadowSuper=%p alpha=%.3f hidden=%d model=(%.3f %.3f %.3f %.3f) presentation=(%.3f %.3f %.3f %.3f) shadowPresentation=(%.3f %.3f %.3f %.3f)",
-                           iconView, folderIcon, insideFolder, iconView.location,
-                           iconView.window, NSStringFromClass([iconView.superview class]),
-                           iconView.contentContainerView, iconView.icon110ShadowView,
-                           iconView.icon110ShadowView.superview, iconView.icon110ShadowView.alpha,
-                           iconView.icon110ShadowView.hidden,
-                           containerLayer.transform.m11, containerLayer.transform.m22,
-                           containerLayer.transform.m41, containerLayer.transform.m42,
-                           containerPresentation.m11, containerPresentation.m22,
-                           containerPresentation.m41, containerPresentation.m42,
-                           shadowPresentation.m11, shadowPresentation.m22,
-                           shadowPresentation.m41, shadowPresentation.m42];
-    }
-    Icon110FolderLog(@"%@", dump);
 }
 
 static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
@@ -435,19 +378,23 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
     if (!container) return;
 
+    CATransform3D inheritedTransform = container.layer.sublayerTransform;
+    CGFloat scaleX = fabs(inheritedTransform.m11);
+    CGFloat scaleY = fabs(inheritedTransform.m22);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [shadowView.layer removeAnimationForKey:@"transform"];
+    [shadowView.layer setAffineTransform:CGAffineTransformMakeScale(
+        scaleX > 0.0 ? 1.0 / scaleX : 1.0,
+        scaleY > 0.0 ? 1.0 / scaleY : 1.0)];
     [UIView performWithoutAnimation:^{
-        CATransform3D inheritedTransform = container.layer.sublayerTransform;
-        CGFloat scaleX = fabs(inheritedTransform.m11);
-        CGFloat scaleY = fabs(inheritedTransform.m22);
-        shadowView.transform = CGAffineTransformMakeScale(
-            scaleX > 0.0 ? 1.0 / scaleX : 1.0,
-            scaleY > 0.0 ? 1.0 / scaleY : 1.0);
         shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
                                         CGRectGetMidY(container.bounds));
         if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
             [container insertSubview:shadowView atIndex:0];
         }
     }];
+    [CATransaction commit];
 }
 
 %end
@@ -472,7 +419,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               location:(id)location
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
-    Icon110LogFolderState(@"push BEFORE", self);
     Icon110BeginFolderTransition();
     ++gShadowFolderTransitionGeneration;
     gShadowFolderClosing = NO;
@@ -480,12 +426,10 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     gShadowFolderPresented = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
-        Icon110LogFolderState(@"push COMPLETION", self);
         Icon110EndFolderTransition();
         if (completion) completion();
     };
     %orig(folderIcon, location, animated, wrappedCompletion);
-    Icon110LogFolderState(@"push AFTER", self);
 }
 
 - (void)popFolderAnimated:(BOOL)animated
@@ -527,9 +471,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)setFraction:(double)fraction {
     %orig(fraction);
-    if (gShadowFolderPresented || gShadowFolderClosing) {
-        Icon110LogFolderState([NSString stringWithFormat:@"fraction %.4f", fraction], nil);
-    }
     if (gShadowFolderClosing && !gShadowFolderClosingRevealed && fraction >= 0.85) {
         gShadowFolderClosingRevealed = YES;
         Icon110UpdateAllShadows();
@@ -622,8 +563,4 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %ctor {
     gShadowIconViews = [NSHashTable weakObjectsHashTable];
-    [@"Icon110 folder diagnostic start\n" writeToFile:kIcon110FolderLogPath
-                                            atomically:YES
-                                              encoding:NSUTF8StringEncoding
-                                                 error:nil];
 }
