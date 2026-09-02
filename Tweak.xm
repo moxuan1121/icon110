@@ -308,9 +308,13 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
 }
 
-- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    if ([self isFolderIcon]) self.icon110ShadowView.alpha = 0.0;
-    %orig(touches, event);
+- (UIView *)iconImageSnapshotView {
+    UIImageView *shadowView = [self isFolderIcon] ? self.icon110ShadowView : nil;
+    CGFloat shadowAlpha = shadowView.alpha;
+    shadowView.alpha = 0.0;
+    UIView *snapshot = %orig;
+    shadowView.alpha = shadowAlpha;
+    return snapshot;
 }
 
 %new
@@ -425,6 +429,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
+        Icon110UpdateAllShadows();
         if (completion) completion();
     };
     %orig(folderIcon, location, animated, wrappedCompletion);
