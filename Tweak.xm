@@ -7,6 +7,7 @@ static const CGFloat kIconScale = 1.10;
 static NSUInteger gIcon110FolderTransitionDepth = 0;
 static BOOL gShadowFolderPresented = NO;
 static BOOL gShadowFolderClosing = NO;
+static BOOL gShadowDragging = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
 
@@ -45,6 +46,7 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 @property (nonatomic, strong) UIView *contentContainerView;
 @property (nonatomic, strong) NSString *location;
 @property (nonatomic, readonly) CGFloat effectiveIconImageAlpha;
+@property (nonatomic, readonly, getter=isDragging) BOOL dragging;
 @property (nonatomic, assign) BOOL icon110ScaleApplied;
 @property (nonatomic, strong) NSValue *icon110OriginalSublayerTransform;
 @property (nonatomic, strong) UIImageView *icon110ShadowView;
@@ -57,6 +59,9 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110HideLabel;
 - (void)_icon110SetUpShadow;
 - (void)_icon110UpdateShadowLayout;
+- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session;
+- (id)dragPreviewForItem:(id)item session:(id)session;
+- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation;
 @end
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
@@ -69,8 +74,15 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
+    if (gShadowDragging || iconView.isDragging) return 0.0;
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
-    if ([iconView isFolderIcon]) return iconAlpha;
+    BOOL isFolderIcon = [iconView isFolderIcon];
+    if ([iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
+        return 0.0;
+    }
+    if (isFolderIcon) {
+        return (gShadowFolderPresented || gShadowFolderClosing) ? 0.0 : iconAlpha;
+    }
     if ((gShadowFolderClosing && isInsideFolder) ||
         (gShadowFolderPresented && !isInsideFolder)) {
         return 0.0;
@@ -305,6 +317,57 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
 }
 
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ([self isFolderIcon]) {
+        self.icon110ShadowView.alpha = 0.0;
+        NSUInteger generation = gShadowFolderTransitionGeneration;
+        __weak SBIconView *weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SBIconView *iconView = weakSelf;
+            if (iconView && generation == gShadowFolderTransitionGeneration &&
+                !gShadowFolderPresented && !gShadowFolderClosing) {
+                iconView.icon110ShadowView.alpha =
+                    Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
+            }
+        });
+    }
+    %orig(touches, event);
+}
+
+- (void)setEditing:(BOOL)editing animated:(BOOL)animated {
+    %orig(editing, animated);
+    [self _icon110UpdateShadowLayout];
+    self.icon110ShadowView.alpha =
+        Icon110ShadowAlpha(self, self.effectiveIconImageAlpha);
+}
+
+- (NSArray *)dragInteraction:(id)interaction itemsForBeginningSession:(id)session {
+    gShadowDragging = YES;
+    Icon110UpdateAllShadows();
+    NSArray *items = %orig(interaction, session);
+    if (items.count == 0) {
+        gShadowDragging = NO;
+        Icon110UpdateAllShadows();
+    }
+    return items;
+}
+
+- (id)dragPreviewForItem:(id)item session:(id)session {
+    UITargetedDragPreview *preview = %orig(item, session);
+    if (preview) preview.parameters.shadowPath = [UIBezierPath bezierPath];
+    return preview;
+}
+
+- (void)dragInteraction:(id)interaction
+                session:(id)session
+    didEndWithOperation:(NSUInteger)operation {
+    %orig(interaction, session, operation);
+    gShadowDragging = NO;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        Icon110UpdateAllShadows();
+    });
+}
+
 %new
 - (void)_icon110ApplyScale {
     UIView *container = self.contentContainerView;
@@ -425,19 +488,28 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
     Icon110BeginFolderTransition();
-    ++gShadowFolderTransitionGeneration;
+    NSUInteger generation = ++gShadowFolderTransitionGeneration;
     gShadowFolderClosing = NO;
     gShadowFolderPresented = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
         if (completion) completion();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (generation != gShadowFolderTransitionGeneration ||
+                !gShadowFolderPresented || gShadowFolderClosing) return;
+            for (SBIconView *iconView in gShadowIconViews.allObjects) {
+                if (![iconView.location containsString:@"SBIconLocationFolder"]) continue;
+                [iconView.contentContainerView setNeedsLayout];
+                [iconView.contentContainerView layoutIfNeeded];
+                [iconView _icon110ApplyScale];
+                [iconView _icon110UpdateShadowLayout];
+                iconView.icon110ShadowView.alpha =
+                    Icon110ShadowAlpha(iconView, iconView.effectiveIconImageAlpha);
+            }
+        });
     };
-    for (SBIconView *iconView in gShadowIconViews.allObjects) {
-        if ([iconView isFolderIcon]) iconView.icon110ShadowView.alpha = 0.0;
-    }
     %orig(folderIcon, location, animated, wrappedCompletion);
-    Icon110UpdateAllShadows();
 }
 
 - (void)popFolderAnimated:(BOOL)animated
