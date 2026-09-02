@@ -337,8 +337,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 - (id)dragPreviewForItem:(id)item session:(id)session {
     UITargetedDragPreview *preview = %orig(item, session);
     if (!preview) return nil;
-    UIPreviewParameters *parameters = preview.parameters;
-    parameters.shadowPath = [UIBezierPath bezierPath];
+    UIPreviewParameters *originalParameters = preview.parameters;
+    UIPreviewParameters *parameters = [UIPreviewParameters new];
+    parameters.backgroundColor = originalParameters.backgroundColor;
+    parameters.visiblePath = originalParameters.visiblePath;
+    parameters.shadowPath = [UIBezierPath bezierPathWithRect:CGRectZero];
     return [[UITargetedDragPreview alloc] initWithView:preview.view
                                            parameters:parameters
                                                target:preview.target];
