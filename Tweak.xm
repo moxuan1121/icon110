@@ -338,7 +338,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     UITargetedDragPreview *preview = %orig(item, session);
     if (!preview) return nil;
     UIPreviewParameters *parameters = preview.parameters;
-    parameters.shadowPath = [UIBezierPath bezierPath];
+    CGRect bounds = preview.view.bounds;
+    parameters.shadowPath = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(
+        CGRectGetMidX(bounds), CGRectGetMidY(bounds), 0.01, 0.01)];
     return [[UITargetedDragPreview alloc] initWithView:preview.view
                                            parameters:parameters
                                                target:preview.target];
@@ -420,15 +422,21 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
     if (!container) return;
 
-    [UIView performWithoutAnimation:^{
-        CATransform3D inheritedTransform = container.layer.sublayerTransform;
-        shadowView.layer.transform = CATransform3DInvert(inheritedTransform);
-        shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
-                                        CGRectGetMidY(container.bounds));
-        if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
-            [container insertSubview:shadowView atIndex:0];
-        }
-    }];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [shadowView.layer removeAnimationForKey:@"position"];
+    [shadowView.layer removeAnimationForKey:@"bounds"];
+    [shadowView.layer removeAnimationForKey:@"transform"];
+    CGSize shadowSize = shadowView.image.size;
+    shadowView.layer.bounds = CGRectMake(0.0, 0.0, shadowSize.width, shadowSize.height);
+    shadowView.layer.anchorPoint = CGPointMake(0.5, 0.5);
+    shadowView.layer.position = CGPointMake(CGRectGetMidX(container.bounds),
+                                            CGRectGetMidY(container.bounds));
+    shadowView.layer.transform = CATransform3DInvert(container.layer.sublayerTransform);
+    if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
+        [container insertSubview:shadowView atIndex:0];
+    }
+    [CATransaction commit];
 }
 
 %end
