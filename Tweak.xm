@@ -70,10 +70,7 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
-    static Class folderIconClass;
-    if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
-    BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
-    if (isFolderIcon) return 0.0;
+    if ([iconView isFolderIcon]) return iconAlpha;
     if ((gShadowFolderClosing && isInsideFolder) ||
         (gShadowFolderPresented && !isInsideFolder)) {
         return 0.0;
@@ -374,20 +371,29 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     }
     if (!container) return;
 
-    CATransform3D inheritedTransform = container.layer.sublayerTransform;
-    CGFloat scaleX = fabs(inheritedTransform.m11);
-    CGFloat scaleY = fabs(inheritedTransform.m22);
+    BOOL isFolderIcon = [self isFolderIcon];
+    UIView *shadowHost = isFolderIcon ? self : container;
+    CGAffineTransform shadowTransform = CGAffineTransformIdentity;
+    if (!isFolderIcon) {
+        CATransform3D inheritedTransform = container.layer.sublayerTransform;
+        CGFloat scaleX = fabs(inheritedTransform.m11);
+        CGFloat scaleY = fabs(inheritedTransform.m22);
+        shadowTransform = CGAffineTransformMakeScale(
+            scaleX > 0.0 ? 1.0 / scaleX : 1.0,
+            scaleY > 0.0 ? 1.0 / scaleY : 1.0);
+    }
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     [shadowView.layer removeAnimationForKey:@"transform"];
-    [shadowView.layer setAffineTransform:CGAffineTransformMakeScale(
-        scaleX > 0.0 ? 1.0 / scaleX : 1.0,
-        scaleY > 0.0 ? 1.0 / scaleY : 1.0)];
+    [shadowView.layer setAffineTransform:shadowTransform];
     [UIView performWithoutAnimation:^{
-        shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
-                                        CGRectGetMidY(container.bounds));
-        if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
-            [container insertSubview:shadowView atIndex:0];
+        CGPoint containerCenter = CGPointMake(CGRectGetMidX(container.bounds),
+                                              CGRectGetMidY(container.bounds));
+        shadowView.center = isFolderIcon
+            ? [self convertPoint:containerCenter fromView:container]
+            : containerCenter;
+        if (shadowView.superview != shadowHost || shadowHost.subviews.firstObject != shadowView) {
+            [shadowHost insertSubview:shadowView atIndex:0];
         }
     }];
     [CATransaction commit];
