@@ -500,46 +500,12 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %end
 
-@interface SBFolderIconImageView : UIView
-@property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
-@end
-
-static void Icon110ApplyMiniGridShadows(CALayer *layer) {
-    layer.masksToBounds = NO;
-    if (layer.contents) {
-        layer.shadowColor = UIColor.blackColor.CGColor;
-        layer.shadowOpacity = 0.75;
-        layer.shadowRadius = 0.8;
-        layer.shadowOffset = CGSizeMake(0.0, 1.5);
-        layer.shadowPath = nil;
-    }
-    for (CALayer *sublayer in layer.sublayers) {
-        Icon110ApplyMiniGridShadows(sublayer);
-    }
-}
-
 %hook SBFolderIconImageView
 
-%property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
-
-- (void)layoutSubviews {
-    %orig;
-    Ivar gridIvar = class_getInstanceVariable([self class], "_pageGridContainer");
-    UIView *gridContainer = gridIvar ? object_getIvar(self, gridIvar) : nil;
-    if (gridContainer) Icon110ApplyMiniGridShadows(gridContainer.layer);
-}
-
 - (void)setBackgroundView:(id)backgroundView {
-    UIView *transparentView = self.icon110TransparentBackgroundView;
-    if (!transparentView) {
-        transparentView = [[UIView alloc] initWithFrame:CGRectZero];
-        transparentView.userInteractionEnabled = NO;
-        transparentView.backgroundColor = [UIColor clearColor];
-        self.icon110TransparentBackgroundView = transparentView;
-    }
-    // iOS 15 renders the Home Screen folder plate through this assigned view.
-    // Reusing one blank view preserves the system transition handoff without
-    // drawing the material behind the miniature icons.
+    UIView *transparentView = [UIView new];
+    transparentView.userInteractionEnabled = NO;
+    transparentView.backgroundColor = UIColor.clearColor;
     %orig(transparentView);
 }
 
