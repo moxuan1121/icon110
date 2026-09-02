@@ -71,9 +71,7 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
-    static Class folderIconClass;
-    if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
-    BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
+    BOOL isFolderIcon = [iconView isFolderIcon];
     if ((gShadowFolderClosing &&
          (isInsideFolder || (isFolderIcon && !gShadowFolderClosingRevealed))) ||
         (gShadowFolderPresented && (!isInsideFolder || isFolderIcon))) {
