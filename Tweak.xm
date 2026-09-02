@@ -76,7 +76,7 @@ static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
     BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
     if ((gShadowFolderClosing &&
          (isInsideFolder || (isFolderIcon && !gShadowFolderClosingRevealed))) ||
-        (gShadowFolderPresented && !isInsideFolder)) {
+        (gShadowFolderPresented && (!isInsideFolder || isFolderIcon))) {
         return 0.0;
     }
     return iconAlpha;
