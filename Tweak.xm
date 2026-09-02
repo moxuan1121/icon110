@@ -10,6 +10,26 @@ static BOOL gShadowFolderClosing = NO;
 static BOOL gShadowFolderClosingRevealed = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
+static NSString *const kIcon110GeometryLogPath = @"/var/mobile/Library/Preferences/com.moxuan.icon110.geometry.log";
+
+static void Icon110GeometryLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+static void Icon110GeometryLog(NSString *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:arguments];
+    va_end(arguments);
+    NSString *line = [NSString stringWithFormat:@"%.6f %@\n", NSDate.date.timeIntervalSince1970, message];
+    @synchronized([NSFileHandle class]) {
+        NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110GeometryLogPath];
+        if (!handle) {
+            [NSFileManager.defaultManager createFileAtPath:kIcon110GeometryLogPath contents:nil attributes:nil];
+            handle = [NSFileHandle fileHandleForWritingAtPath:kIcon110GeometryLogPath];
+        }
+        [handle seekToEndOfFile];
+        [handle writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+        [handle closeFile];
+    }
+}
 static BOOL Icon110FolderTransitionIsActive(void) {
     return gIcon110FolderTransitionDepth > 0;
 }
@@ -86,6 +106,29 @@ static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
         return 0.0;
     }
     return iconAlpha;
+}
+
+static void Icon110LogShadowGeometry(NSString *event, SBIconView *iconView) {
+    if (!iconView) return;
+    UIView *container = iconView.contentContainerView;
+    UIImageView *shadow = iconView.icon110ShadowView;
+    CALayer *presentation = (CALayer *)shadow.layer.presentationLayer;
+    Icon110GeometryLog(@"%@ view=%p icon=%p iconClass=%@ location=%@ dragging=%d editing=%d "
+                       "container=%p cFrame=%@ cBounds=%@ cSublayer=%@ "
+                       "shadow=%p super=%p alpha=%.3f sFrame=%@ sBounds=%@ sCenter=%@ "
+                       "sPosition=%@ sAnchor=%@ sTransform=%@ animations=%@ "
+                       "pFrame=%@ pBounds=%@ pPosition=%@ pTransform=%@",
+                       event, iconView, iconView.icon, NSStringFromClass([iconView.icon class]),
+                       iconView.location, iconView.isDragging, iconView.isEditing,
+                       container, NSStringFromCGRect(container.frame), NSStringFromCGRect(container.bounds),
+                       [NSValue valueWithCATransform3D:container.layer.sublayerTransform],
+                       shadow, shadow.superview, shadow.alpha, NSStringFromCGRect(shadow.frame),
+                       NSStringFromCGRect(shadow.bounds), NSStringFromCGPoint(shadow.center),
+                       NSStringFromCGPoint(shadow.layer.position), NSStringFromCGPoint(shadow.layer.anchorPoint),
+                       [NSValue valueWithCATransform3D:shadow.layer.transform], shadow.layer.animationKeys,
+                       NSStringFromCGRect(presentation.frame), NSStringFromCGRect(presentation.bounds),
+                       NSStringFromCGPoint(presentation.position),
+                       [NSValue valueWithCATransform3D:presentation.transform]);
 }
 
 static void Icon110UpdateAllShadows(void) {
@@ -335,10 +378,14 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 }
 
 - (id)dragPreviewForItem:(id)item session:(id)session {
+    Icon110LogShadowGeometry(@"DRAG_PREVIEW_BEFORE", self);
     UITargetedDragPreview *preview = %orig(item, session);
     if (!preview) return nil;
     UIPreviewParameters *parameters = preview.parameters;
     parameters.shadowPath = [UIBezierPath bezierPath];
+    Icon110GeometryLog(@"DRAG_PREVIEW_AFTER source=%p preview=%p previewView=%p class=%@ bounds=%@ animations=%@",
+                       self, preview, preview.view, NSStringFromClass(preview.view.class),
+                       NSStringFromCGRect(preview.view.bounds), preview.view.layer.animationKeys);
     return [[UITargetedDragPreview alloc] initWithView:preview.view
                                            parameters:parameters
                                                target:preview.target];
@@ -433,6 +480,14 @@ static void Icon110HookContextMenuDelegate(id delegate) {
             [container insertSubview:shadowView atIndex:0];
         }
     }];
+    if ([self.location containsString:@"SBIconLocationFolder"]) {
+        Icon110LogShadowGeometry(@"FOLDER_LAYOUT_NOW", self);
+        __weak SBIconView *weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            Icon110LogShadowGeometry(@"FOLDER_LAYOUT_SETTLED", weakSelf);
+        });
+    }
 }
 
 %end
@@ -601,4 +656,8 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %ctor {
     gShadowIconViews = [NSHashTable weakObjectsHashTable];
+    [@"Icon110 geometry diagnostic start\n" writeToFile:kIcon110GeometryLogPath
+                                               atomically:YES
+                                                 encoding:NSUTF8StringEncoding
+                                                    error:nil];
 }
