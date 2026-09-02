@@ -505,6 +505,14 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 %hook SBFolderBackgroundView
 
+- (void)setHidden:(BOOL)hidden {
+    %orig(YES);
+}
+
+- (void)setAlpha:(CGFloat)alpha {
+    %orig(0.0);
+}
+
 - (void)layoutSubviews {
     %orig;
     UIView *backgroundView = (UIView *)self;
