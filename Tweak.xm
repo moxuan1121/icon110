@@ -337,11 +337,8 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 - (id)dragPreviewForItem:(id)item session:(id)session {
     UITargetedDragPreview *preview = %orig(item, session);
     if (!preview) return nil;
-    UIPreviewParameters *originalParameters = preview.parameters;
-    UIPreviewParameters *parameters = [UIPreviewParameters new];
-    parameters.backgroundColor = originalParameters.backgroundColor;
-    parameters.visiblePath = originalParameters.visiblePath;
-    parameters.shadowPath = [UIBezierPath bezierPathWithRect:CGRectZero];
+    UIPreviewParameters *parameters = preview.parameters;
+    parameters.shadowPath = [UIBezierPath bezierPath];
     return [[UITargetedDragPreview alloc] initWithView:preview.view
                                            parameters:parameters
                                                target:preview.target];
@@ -425,11 +422,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
     [UIView performWithoutAnimation:^{
         CATransform3D inheritedTransform = container.layer.sublayerTransform;
-        CGFloat scaleX = fabs(inheritedTransform.m11);
-        CGFloat scaleY = fabs(inheritedTransform.m22);
-        shadowView.transform = CGAffineTransformMakeScale(
-            scaleX > 0.0 ? 1.0 / scaleX : 1.0,
-            scaleY > 0.0 ? 1.0 / scaleY : 1.0);
+        shadowView.layer.transform = CATransform3DInvert(inheritedTransform);
         shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
                                         CGRectGetMidY(container.bounds));
         if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
