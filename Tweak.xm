@@ -70,7 +70,8 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
-    if ([iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
+    if (gShadowFolderPresented &&
+        [iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
         return 0.0;
     }
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
