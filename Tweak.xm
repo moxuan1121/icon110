@@ -289,6 +289,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     %orig;
     [self _icon110ApplyScale];
     [self _icon110HideLabel];
+    if ([self isFolderIcon]) [self _icon110UpdateShadowLayout];
 }
 
 - (void)layoutSubviews {
@@ -372,7 +373,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     if (!container) return;
 
     BOOL isFolderIcon = [self isFolderIcon];
-    UIView *shadowHost = isFolderIcon ? self : container;
+    UIView *shadowHost = isFolderIcon ? (self.superview ?: self) : container;
     CGAffineTransform shadowTransform = CGAffineTransformIdentity;
     if (!isFolderIcon) {
         CATransform3D inheritedTransform = container.layer.sublayerTransform;
@@ -390,9 +391,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
         CGPoint containerCenter = CGPointMake(CGRectGetMidX(container.bounds),
                                               CGRectGetMidY(container.bounds));
         shadowView.center = isFolderIcon
-            ? [self convertPoint:containerCenter fromView:container]
+            ? [shadowHost convertPoint:containerCenter fromView:container]
             : containerCenter;
-        if (shadowView.superview != shadowHost || shadowHost.subviews.firstObject != shadowView) {
+        if (isFolderIcon && shadowHost == self.superview) {
+            [shadowHost insertSubview:shadowView belowSubview:self];
+        } else if (shadowView.superview != shadowHost || shadowHost.subviews.firstObject != shadowView) {
             [shadowHost insertSubview:shadowView atIndex:0];
         }
     }];
