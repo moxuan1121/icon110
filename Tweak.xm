@@ -7,7 +7,6 @@ static const CGFloat kIconScale = 1.10;
 static NSUInteger gIcon110FolderTransitionDepth = 0;
 static BOOL gShadowFolderPresented = NO;
 static BOOL gShadowFolderClosing = NO;
-static BOOL gShadowFolderClosingRevealed = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
 static NSHashTable *gShadowIconViews;
 
@@ -70,20 +69,14 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
-    if ([iconView.superview isKindOfClass:objc_getClass("SBFTouchPassThroughView")]) {
-        return 0.0;
-    }
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
     BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
-    if ((gShadowFolderClosing &&
-         (isInsideFolder || (isFolderIcon && !gShadowFolderClosingRevealed))) ||
+    if (isFolderIcon) return 0.0;
+    if ((gShadowFolderClosing && isInsideFolder) ||
         (gShadowFolderPresented && !isInsideFolder)) {
         return 0.0;
-    }
-    if (gShadowFolderClosingRevealed && isFolderIcon) {
-        return 1.0;
     }
     return iconAlpha;
 }
@@ -425,7 +418,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     Icon110BeginFolderTransition();
     ++gShadowFolderTransitionGeneration;
     gShadowFolderClosing = NO;
-    gShadowFolderClosingRevealed = NO;
     gShadowFolderPresented = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
@@ -441,7 +433,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     NSUInteger generation = ++gShadowFolderTransitionGeneration;
     gShadowFolderPresented = NO;
     gShadowFolderClosing = YES;
-    gShadowFolderClosingRevealed = NO;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
@@ -449,7 +440,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (generation == gShadowFolderTransitionGeneration) {
                 gShadowFolderClosing = NO;
-                gShadowFolderClosingRevealed = NO;
                 gShadowFolderPresented = NO;
                 Icon110UpdateAllShadows();
             }
@@ -463,21 +453,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     if (open || gShadowFolderClosing || !gShadowFolderPresented) return;
     gShadowFolderPresented = NO;
     gShadowFolderClosing = NO;
-    gShadowFolderClosingRevealed = NO;
     Icon110UpdateAllShadows();
-}
-
-%end
-
-
-%hook SBIconAnimator
-
-- (void)setFraction:(double)fraction {
-    %orig(fraction);
-    if (gShadowFolderClosing && !gShadowFolderClosingRevealed && fraction >= 0.85) {
-        gShadowFolderClosingRevealed = YES;
-        Icon110UpdateAllShadows();
-    }
 }
 
 %end
@@ -528,9 +504,30 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 @property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
 @end
 
+static void Icon110ApplyMiniGridShadows(CALayer *layer) {
+    layer.masksToBounds = NO;
+    if (layer.contents) {
+        layer.shadowColor = UIColor.blackColor.CGColor;
+        layer.shadowOpacity = 0.75;
+        layer.shadowRadius = 0.8;
+        layer.shadowOffset = CGSizeMake(0.0, 1.5);
+        layer.shadowPath = nil;
+    }
+    for (CALayer *sublayer in layer.sublayers) {
+        Icon110ApplyMiniGridShadows(sublayer);
+    }
+}
+
 %hook SBFolderIconImageView
 
 %property (nonatomic, strong) UIView *icon110TransparentBackgroundView;
+
+- (void)layoutSubviews {
+    %orig;
+    Ivar gridIvar = class_getInstanceVariable([self class], "_pageGridContainer");
+    UIView *gridContainer = gridIvar ? object_getIvar(self, gridIvar) : nil;
+    if (gridContainer) Icon110ApplyMiniGridShadows(gridContainer.layer);
+}
 
 - (void)setBackgroundView:(id)backgroundView {
     UIView *transparentView = self.icon110TransparentBackgroundView;
