@@ -71,10 +71,12 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
-    BOOL isFolderIcon = [iconView isFolderIcon];
+    static Class folderIconClass;
+    if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
+    BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
     if ((gShadowFolderClosing &&
          (isInsideFolder || (isFolderIcon && !gShadowFolderClosingRevealed))) ||
-        (gShadowFolderPresented && (!isInsideFolder || isFolderIcon))) {
+        (gShadowFolderPresented && !isInsideFolder)) {
         return 0.0;
     }
     return iconAlpha;
@@ -306,6 +308,11 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
 }
 
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    if ([self isFolderIcon]) self.icon110ShadowView.alpha = 0.0;
+    %orig(touches, event);
+}
+
 %new
 - (void)_icon110ApplyScale {
     UIView *container = self.contentContainerView;
@@ -502,14 +509,6 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 %end
 
 %hook SBFolderBackgroundView
-
-- (void)setHidden:(BOOL)hidden {
-    %orig(YES);
-}
-
-- (void)setAlpha:(CGFloat)alpha {
-    %orig(0.0);
-}
 
 - (void)layoutSubviews {
     %orig;
