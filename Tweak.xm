@@ -103,6 +103,18 @@ static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
     }
 }
 
+static UIView *Icon110ImageViewInView(UIView *view, NSUInteger depth) {
+    if (!view || depth > 3) return nil;
+    static Class imageViewClass;
+    if (!imageViewClass) imageViewClass = objc_getClass("SBIconImageView");
+    for (UIView *subview in view.subviews) {
+        if (imageViewClass && [subview isKindOfClass:imageViewClass]) return subview;
+        UIView *result = Icon110ImageViewInView(subview, depth + 1);
+        if (result) return result;
+    }
+    return nil;
+}
+
 static BOOL Icon110ShouldScaleIconView(SBIconView *iconView) {
     if (!iconView || !iconView.icon) return NO;
     NSString *iconClassName = NSStringFromClass([iconView.icon class]);
@@ -384,8 +396,13 @@ static void Icon110HookContextMenuDelegate(id delegate) {
         scaleX > 0.0 ? 1.0 / scaleX : 1.0,
         scaleY > 0.0 ? 1.0 / scaleY : 1.0)];
     [UIView performWithoutAnimation:^{
-        shadowView.center = CGPointMake(CGRectGetMidX(container.bounds),
-                                        CGRectGetMidY(container.bounds));
+        UIView *imageView = Icon110ImageViewInView(container, 0);
+        shadowView.center = imageView && !CGRectIsEmpty(imageView.bounds)
+            ? [container convertPoint:CGPointMake(CGRectGetMidX(imageView.bounds),
+                                                  CGRectGetMidY(imageView.bounds))
+                              fromView:imageView]
+            : CGPointMake(CGRectGetMidX(container.bounds),
+                          CGRectGetMidY(container.bounds));
         if (shadowView.superview != container || container.subviews.firstObject != shadowView) {
             [container insertSubview:shadowView atIndex:0];
         }
