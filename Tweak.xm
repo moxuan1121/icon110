@@ -61,7 +61,7 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110UpdateShadowLayout;
 - (void)dragInteraction:(id)interaction sessionWillBegin:(id)session;
 - (id)dragInteraction:(id)interaction previewForLiftingItem:(id)item session:(id)session;
-- (void)dragInteraction:(id)interaction session:(id)session willEndWithOperation:(NSUInteger)operation;
+- (void)dragInteraction:(id)interaction session:(id)session didEndWithOperation:(NSUInteger)operation;
 @end
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
@@ -329,7 +329,7 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)dragInteraction:(id)interaction
                 session:(id)session
-   willEndWithOperation:(NSUInteger)operation {
+    didEndWithOperation:(NSUInteger)operation {
     %orig(interaction, session, operation);
     NSUInteger generation = ++gShadowDragGeneration;
     dispatch_async(dispatch_get_main_queue(), ^{
