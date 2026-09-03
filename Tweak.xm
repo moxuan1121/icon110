@@ -7,7 +7,9 @@ static const CGFloat kIconScale = 1.10;
 static NSUInteger gIcon110FolderTransitionDepth = 0;
 static BOOL gShadowFolderPresented = NO;
 static BOOL gShadowFolderClosing = NO;
+static BOOL gShadowDragging = NO;
 static NSUInteger gShadowFolderTransitionGeneration = 0;
+static NSUInteger gShadowDragGeneration = 0;
 static NSHashTable *gShadowIconViews;
 
 static BOOL Icon110FolderTransitionIsActive(void) {
@@ -57,6 +59,9 @@ static void Icon110PrepareContextMenuHookStorage(void) {
 - (void)_icon110HideLabel;
 - (void)_icon110SetUpShadow;
 - (void)_icon110UpdateShadowLayout;
+- (void)dragInteraction:(id)interaction sessionWillBegin:(id)session;
+- (id)dragInteraction:(id)interaction previewForLiftingItem:(id)item session:(id)session;
+- (void)dragInteraction:(id)interaction session:(id)session willEndWithOperation:(NSUInteger)operation;
 @end
 
 static BOOL Icon110ShadowUnsupportedIcon(id icon) {
@@ -69,6 +74,7 @@ static BOOL Icon110ShadowUnsupportedIcon(id icon) {
 }
 
 static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
+    if (gShadowDragging) return 0.0;
     BOOL isInsideFolder = [iconView.location containsString:@"SBIconLocationFolder"];
     static Class folderIconClass;
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
@@ -305,6 +311,34 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     %orig(alpha);
     [self _icon110UpdateShadowLayout];
     self.icon110ShadowView.alpha = Icon110ShadowAlpha(self, alpha);
+}
+
+- (id)dragInteraction:(id)interaction previewForLiftingItem:(id)item session:(id)session {
+    ++gShadowDragGeneration;
+    gShadowDragging = YES;
+    Icon110UpdateAllShadows();
+    return %orig(interaction, item, session);
+}
+
+- (void)dragInteraction:(id)interaction sessionWillBegin:(id)session {
+    ++gShadowDragGeneration;
+    gShadowDragging = YES;
+    Icon110UpdateAllShadows();
+    %orig(interaction, session);
+}
+
+- (void)dragInteraction:(id)interaction
+                session:(id)session
+   willEndWithOperation:(NSUInteger)operation {
+    %orig(interaction, session, operation);
+    NSUInteger generation = ++gShadowDragGeneration;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (generation != gShadowDragGeneration) return;
+            gShadowDragging = NO;
+            Icon110UpdateAllShadows();
+        });
+    });
 }
 
 %new
