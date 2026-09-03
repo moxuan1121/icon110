@@ -4,23 +4,27 @@
 #import <roothide.h>
 
 static const CGFloat kIconScale = 1.10;
-static NSUInteger gIcon110FolderTransitionDepth = 0;
-static BOOL gShadowFolderPresented = NO;
-static BOOL gShadowFolderClosing = NO;
-static NSUInteger gShadowFolderTransitionGeneration = 0;
+typedef struct {
+    NSUInteger transitionDepth;
+    NSUInteger generation;
+    BOOL presented;
+    BOOL closing;
+} Icon110FolderState;
+
+static Icon110FolderState gFolderState;
 static NSHashTable *gShadowIconViews;
 
 static BOOL Icon110FolderTransitionIsActive(void) {
-    return gIcon110FolderTransitionDepth > 0;
+    return gFolderState.transitionDepth > 0;
 }
 
 static void Icon110BeginFolderTransition(void) {
-    gIcon110FolderTransitionDepth++;
+    gFolderState.transitionDepth++;
 }
 
 static void Icon110EndFolderTransition(void) {
-    if (gIcon110FolderTransitionDepth > 0) {
-        gIcon110FolderTransitionDepth--;
+    if (gFolderState.transitionDepth > 0) {
+        gFolderState.transitionDepth--;
     }
 }
 
@@ -74,8 +78,8 @@ static CGFloat Icon110ShadowAlpha(SBIconView *iconView, CGFloat iconAlpha) {
     if (!folderIconClass) folderIconClass = objc_getClass("SBFolderIcon");
     BOOL isFolderIcon = [iconView.icon isKindOfClass:folderIconClass];
     if (isFolderIcon) return 0.0;
-    if ((gShadowFolderClosing && isInsideFolder) ||
-        (gShadowFolderPresented && !isInsideFolder)) {
+    if ((gFolderState.closing && isInsideFolder) ||
+        (gFolderState.presented && !isInsideFolder)) {
         return 0.0;
     }
     return iconAlpha;
@@ -101,6 +105,11 @@ static void Icon110HideLabelSubviews(UIView *view, NSUInteger depth) {
             Icon110HideLabelSubviews(subview, depth + 1);
         }
     }
+}
+
+static void Icon110UpdateScaleAndLabel(SBIconView *iconView) {
+    [iconView _icon110ApplyScale];
+    [iconView _icon110HideLabel];
 }
 
 static UIView *Icon110ImageViewInView(UIView *view, NSUInteger depth) {
@@ -296,20 +305,17 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)_updateIconImageViewAnimated:(BOOL)animated {
     %orig(animated);
-    [self _icon110ApplyScale];
-    [self _icon110HideLabel];
+    Icon110UpdateScaleAndLabel(self);
 }
 
 - (void)didMoveToSuperview {
     %orig;
-    [self _icon110ApplyScale];
-    [self _icon110HideLabel];
+    Icon110UpdateScaleAndLabel(self);
 }
 
 - (void)layoutSubviews {
     %orig;
-    [self _icon110ApplyScale];
-    [self _icon110HideLabel];
+    Icon110UpdateScaleAndLabel(self);
     [self _icon110UpdateShadowLayout];
 }
 
@@ -433,9 +439,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
     Icon110BeginFolderTransition();
-    ++gShadowFolderTransitionGeneration;
-    gShadowFolderClosing = NO;
-    gShadowFolderPresented = YES;
+    ++gFolderState.generation;
+    gFolderState.closing = NO;
+    gFolderState.presented = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
@@ -447,17 +453,17 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 - (void)popFolderAnimated:(BOOL)animated
                completion:(Icon110Completion)completion {
     Icon110BeginFolderTransition();
-    NSUInteger generation = ++gShadowFolderTransitionGeneration;
-    gShadowFolderPresented = NO;
-    gShadowFolderClosing = YES;
+    NSUInteger generation = ++gFolderState.generation;
+    gFolderState.presented = NO;
+    gFolderState.closing = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
         if (completion) completion();
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (generation == gShadowFolderTransitionGeneration) {
-                gShadowFolderClosing = NO;
-                gShadowFolderPresented = NO;
+            if (generation == gFolderState.generation) {
+                gFolderState.closing = NO;
+                gFolderState.presented = NO;
                 Icon110UpdateAllShadows();
             }
         });
@@ -467,9 +473,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
 
 - (void)setOpen:(BOOL)open {
     %orig(open);
-    if (open || gShadowFolderClosing || !gShadowFolderPresented) return;
-    gShadowFolderPresented = NO;
-    gShadowFolderClosing = NO;
+    if (open || gFolderState.closing || !gFolderState.presented) return;
+    gFolderState.presented = NO;
+    gFolderState.closing = NO;
     Icon110UpdateAllShadows();
 }
 
