@@ -416,13 +416,23 @@ static void Icon110HookContextMenuDelegate(id delegate) {
               animated:(BOOL)animated
             completion:(Icon110Completion)completion {
     Icon110BeginFolderTransition();
-    ++gShadowFolderTransitionGeneration;
+    NSUInteger generation = ++gShadowFolderTransitionGeneration;
     gShadowFolderClosing = NO;
     gShadowFolderPresented = YES;
     Icon110UpdateAllShadows();
     Icon110Completion wrappedCompletion = ^{
         Icon110EndFolderTransition();
         if (completion) completion();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (generation != gShadowFolderTransitionGeneration ||
+                !gShadowFolderPresented || gShadowFolderClosing) return;
+            for (SBIconView *iconView in gShadowIconViews.allObjects) {
+                if (![iconView.location containsString:@"SBIconLocationFolder"]) continue;
+                [iconView setNeedsLayout];
+                [iconView layoutIfNeeded];
+                [iconView _icon110UpdateShadowLayout];
+            }
+        });
     };
     %orig(folderIcon, location, animated, wrappedCompletion);
 }
