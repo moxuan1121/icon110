@@ -317,7 +317,9 @@ static void Icon110HookContextMenuDelegate(id delegate) {
     ++gShadowDragGeneration;
     gShadowDragging = YES;
     Icon110UpdateAllShadows();
-    return %orig(interaction, item, session);
+    UITargetedDragPreview *preview = %orig(interaction, item, session);
+    preview.parameters.shadowPath = [UIBezierPath bezierPath];
+    return preview;
 }
 
 - (void)dragInteraction:(id)interaction sessionWillBegin:(id)session {
